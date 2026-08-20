@@ -36,12 +36,23 @@ export interface Offer {
 export type SourceId = "alrajhi" | "snb" | "riyad" | "tamara" | "amazon" | "noon";
 
 export interface SourceDef {
-  id: SourceId;
+  id: string;
   name: string;
   kind: string;
-  status: "live" | "drafting" | "queued";
+  status: "live" | "drafting" | "queued" | "registered";
   progress: number;
   note: string;
+}
+
+/** A bank or vendor the user registers from the UI. Persisted locally. */
+export interface CustomSource {
+  id: string;
+  kind: "bank" | "vendor";
+  name: string;
+  url: string;
+  note?: string;
+  category?: Category;
+  createdAt: number;
 }
 
 export interface LogLine {

@@ -18,9 +18,9 @@ const BADGE: Record<string, string> = {
 };
 
 const STAMP: Record<Offer["kind"], string> = {
-  percent: "bg-lime text-term",
+  percent: "bg-flare text-[#2b0c08]",
   bogo: "bg-amber text-ink",
-  cashback: "bg-lime text-term",
+  cashback: "bg-flare text-[#2b0c08]",
   installments: "border-2 border-term bg-paper text-ink",
 };
 
@@ -37,7 +37,7 @@ export default function OfferTile({ offer, index, onOpen }: Props) {
     >
       <button
         onClick={() => onOpen(offer)}
-        className="group block w-full overflow-hidden rounded-xl border border-ink/10 bg-card text-left shadow-[0_1px_0_rgba(20,35,27,0.06)] transition-all duration-300 hover:-translate-y-1.5 hover:border-ink/20 hover:shadow-[0_24px_44px_-20px_rgba(20,35,27,0.35)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine"
+        className="group block w-full overflow-hidden rounded-xl border border-ink/10 bg-card text-left shadow-[0_1px_0_rgba(39,19,18,0.06)] transition-all duration-300 hover:-translate-y-1.5 hover:border-ink/20 hover:shadow-[0_24px_44px_-20px_rgba(39,19,18,0.35)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brick"
         aria-label={`${offer.merchant} — ${offer.headline}. Open details.`}
       >
         {/* photo */}
@@ -50,7 +50,7 @@ export default function OfferTile({ offer, index, onOpen }: Props) {
               className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.06]"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center font-display text-5xl font-extrabold text-pine/40">
+            <div className="flex h-full w-full items-center justify-center font-display text-5xl font-extrabold text-brick/40">
               {offer.merchant.slice(0, 2).toUpperCase()}
             </div>
           )}
@@ -66,7 +66,7 @@ export default function OfferTile({ offer, index, onOpen }: Props) {
 
           {/* discount stamp */}
           <span
-            className={`absolute -bottom-4 left-3 rounded-md px-2.5 py-1 font-display text-[22px] font-extrabold leading-tight tracking-tight shadow-[0_6px_14px_-6px_rgba(12,23,18,0.5)] transition-transform duration-300 group-hover:scale-105 ${rotate} ${STAMP[offer.kind]}`}
+            className={`absolute -bottom-4 left-3 rounded-md px-2.5 py-1 font-display text-[22px] font-extrabold leading-tight tracking-tight shadow-[0_6px_14px_-6px_rgba(25,16,16,0.5)] transition-transform duration-300 group-hover:scale-105 ${rotate} ${STAMP[offer.kind]}`}
           >
             {offer.discountLabel}
           </span>
@@ -75,10 +75,8 @@ export default function OfferTile({ offer, index, onOpen }: Props) {
         {/* body */}
         <div className="p-4 pb-4 pt-5">
           <div className="flex items-center justify-between font-mono text-[9.5px] uppercase tracking-[0.16em]">
-            <span className="shrink-0 text-pine">{CATEGORY_LABEL[offer.category]}</span>
-            <span className="ml-2 truncate text-ink-faint" title={offer.card}>
-              on {offer.card}
-            </span>
+            <span className="text-brick">{CATEGORY_LABEL[offer.category]}</span>
+            <span className="truncate pl-2 text-ink-faint">on {offer.card}</span>
           </div>
 
           <h3 className="mt-1.5 font-display text-[19px] font-bold leading-snug tracking-tight text-ink">
@@ -90,7 +88,7 @@ export default function OfferTile({ offer, index, onOpen }: Props) {
 
           <div className="mt-3.5 flex items-center justify-between border-t border-line pt-3">
             {offer.code ? (
-              <span className="rounded border border-dashed border-pine/50 bg-tint/70 px-2 py-0.5 font-mono text-[10.5px] font-medium tracking-[0.08em] text-pine">
+              <span className="rounded border border-dashed border-brick/50 bg-tint/70 px-2 py-0.5 font-mono text-[10.5px] font-medium tracking-[0.08em] text-brick">
                 CODE {offer.code}
               </span>
             ) : (
@@ -98,7 +96,7 @@ export default function OfferTile({ offer, index, onOpen }: Props) {
                 NO CODE NEEDED
               </span>
             )}
-            <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft transition-colors group-hover:text-pine">
+            <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft transition-colors group-hover:text-brick">
               Details
               <ArrowUpRight className="h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
             </span>

@@ -16,7 +16,7 @@ export default function Ticker({ offers }: { offers: Offer[] }) {
       {items.map((t, i) => (
         <span key={i} className="flex items-center whitespace-nowrap">
           <span className="px-4">{t}</span>
-          <span className="text-lime/80">◆</span>
+          <span className="text-flare/80">◆</span>
         </span>
       ))}
     </>

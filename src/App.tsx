@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { BrowseScope, Category, LogLine, Offer, ScrapeStatus } from "./types";
+import type { BrowseScope, Category, CustomSource, LogLine, Offer, ScrapeStatus } from "./types";
 import { CATEGORY_LABEL } from "./types";
 import { runScrape } from "./scraper/engine";
 import { daysLeft, formatClock } from "./lib/format";
 import TopBar from "./components/TopBar";
 import Ticker from "./components/Ticker";
 import Terminal from "./components/Terminal";
-import BrowseDrawer from "./components/BrowseDrawer";
 import OfferTile from "./components/OfferTile";
 import OfferModal from "./components/OfferModal";
 import SourcesLedger from "./components/SourcesLedger";
+import BrowseDrawer from "./components/BrowseDrawer";
+import AddSourceModal from "./components/AddSourceModal";
 import Footer from "./components/Footer";
 import {
   BankIcon,
@@ -20,6 +21,17 @@ import {
 } from "./components/icons";
 
 type SortKey = "expiring" | "value" | "recent";
+
+const REGISTRY_KEY = "offradar.registry.v1";
+
+function loadRegistry(): CustomSource[] {
+  try {
+    const raw = localStorage.getItem(REGISTRY_KEY);
+    return raw ? (JSON.parse(raw) as CustomSource[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 function SkeletonTile() {
   return (
@@ -49,6 +61,8 @@ export default function App() {
   const [sort, setSort] = useState<SortKey>("expiring");
   const [scope, setScope] = useState<BrowseScope>({ type: "all" });
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [customSources, setCustomSources] = useState<CustomSource[]>(loadRegistry);
   const [, setTick] = useState(0);
 
   const logId = useRef(0);
@@ -95,6 +109,15 @@ export default function App() {
     return () => window.clearInterval(t);
   }, []);
 
+  // persist the source registry
+  useEffect(() => {
+    try {
+      localStorage.setItem(REGISTRY_KEY, JSON.stringify(customSources));
+    } catch {
+      /* storage unavailable — registry stays in memory */
+    }
+  }, [customSources]);
+
   // "/" focuses search
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -108,17 +131,30 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const applyScope = useCallback(
-    (next: BrowseScope) => {
-      setScope(next);
-      setCategory("all");
-      setSearch("");
-      setDrawerOpen(false);
-      window.setTimeout(() => {
-        document.getElementById("board")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 60);
+  const applyScope = useCallback((next: BrowseScope) => {
+    setScope(next);
+    setCategory("all");
+    setSearch("");
+    setDrawerOpen(false);
+    window.setTimeout(() => {
+      document.getElementById("board")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+  }, []);
+
+  const addSource = useCallback(
+    (s: CustomSource) => {
+      setCustomSources((prev) => [...prev, s]);
+      showToast(`${s.name} registered — queued for its first scrape`);
     },
-    [],
+    [showToast],
+  );
+
+  const removeSource = useCallback(
+    (id: string) => {
+      setCustomSources((prev) => prev.filter((s) => s.id !== id));
+      showToast("Removed from registry");
+    },
+    [showToast],
   );
 
   // offers narrowed by the drawer's bank→card / vendor drill-down
@@ -189,8 +225,8 @@ export default function App() {
         {/* intro + terminal */}
         <section className="grid gap-6 pt-8 sm:pt-12 lg:grid-cols-[1.15fr_1fr] lg:items-end">
           <div>
-            <p className="flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.22em] text-pine">
-              <span className="inline-block h-2 w-2 bg-pine" />
+            <p className="flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.22em] text-brick">
+              <span className="inline-block h-2 w-2 bg-brick" />
               source 01 · al rajhi bank · card-offers
             </p>
             <h1 className="mt-3 font-display text-[34px] font-extrabold leading-[1.04] tracking-tight text-ink sm:text-[52px]">
@@ -221,7 +257,7 @@ export default function App() {
             </p>
             {status === "done" && (
               <p className="mt-3 flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-faint">
-                <span className={`inline-block h-1.5 w-1.5 rounded-full ${live ? "bg-mint" : "bg-amber"}`} />
+                <span className={`inline-block h-1.5 w-1.5 rounded-full ${live ? "bg-live" : "bg-amber"}`} />
                 {note}
               </p>
             )}
@@ -268,24 +304,24 @@ export default function App() {
         {/* control deck */}
         <section id="board" className="mt-8 scroll-mt-24">
           {scope.type !== "all" && (
-            <div className="fade-in mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-pine/30 bg-tint/70 px-4 py-2.5">
+            <div className="fade-in mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-brick/30 bg-tint/70 px-4 py-2.5">
               {scope.type === "vendor" ? (
-                <StoreIcon className="h-4 w-4 text-pine" />
+                <StoreIcon className="h-4 w-4 text-brick" />
               ) : (
-                <BankIcon className="h-4 w-4 text-pine" />
+                <BankIcon className="h-4 w-4 text-brick" />
               )}
-              <span className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-pine/70">
+              <span className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-brick/70">
                 browsing
               </span>
               <span className="font-display text-[14.5px] font-bold tracking-tight text-ink">
                 {scopeLabel}
               </span>
-              <span className="num-tabular rounded-full bg-pine px-2 py-0.5 font-mono text-[10px] font-semibold text-paper">
+              <span className="num-tabular rounded-full bg-brick px-2 py-0.5 font-mono text-[10px] font-semibold text-paper">
                 {scoped.length} offer{scoped.length === 1 ? "" : "s"}
               </span>
               <button
                 onClick={() => applyScope({ type: "all" })}
-                className="ml-auto flex items-center gap-1.5 rounded-full border border-pine/40 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-pine transition-all hover:bg-pine hover:text-paper active:scale-95"
+                className="ml-auto flex items-center gap-1.5 rounded-full border border-brick/40 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-brick transition-all hover:bg-brick hover:text-paper active:scale-95"
               >
                 <CloseIcon className="h-3 w-3" />
                 show all offers
@@ -301,7 +337,7 @@ export default function App() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search merchants, headlines, codes…"
-                className="w-full rounded-full border border-line bg-card py-2.5 pl-10 pr-12 text-[14px] text-ink placeholder:text-ink-faint focus:border-pine focus:outline-none focus:ring-2 focus:ring-pine/25 transition-shadow"
+                className="w-full rounded-full border border-line bg-card py-2.5 pl-10 pr-12 text-[14px] text-ink placeholder:text-ink-faint focus:border-brick focus:outline-none focus:ring-2 focus:ring-brick/25 transition-shadow"
               />
               <kbd className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 rounded border border-line bg-paper px-1.5 py-0.5 font-mono text-[10px] text-ink-faint">
                 /
@@ -328,8 +364,8 @@ export default function App() {
                 onClick={() => setCategory(c)}
                 className={`rounded-full px-3.5 py-1.5 font-mono text-[10.5px] uppercase tracking-[0.12em] transition-all active:scale-95 ${
                   category === c
-                    ? "bg-ink text-paper shadow-[0_4px_12px_-4px_rgba(20,35,27,0.5)]"
-                    : "border border-line bg-card text-ink-soft hover:border-pine/50 hover:text-pine"
+                    ? "bg-ink text-paper shadow-[0_4px_12px_-4px_rgba(39,19,18,0.5)]"
+                    : "border border-line bg-card text-ink-soft hover:border-brick/50 hover:text-brick"
                 }`}
               >
                 {c === "all" ? `all · ${scoped.length || "…"}` : CATEGORY_LABEL[c]}
@@ -367,6 +403,23 @@ export default function App() {
                 <SkeletonTile key={i} />
               ))}
             </div>
+          ) : status === "done" && scoped.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-line bg-card/60 px-6 py-16 text-center">
+              <RadarEmpty />
+              <p className="font-display text-xl font-bold text-ink">
+                Nothing indexed for {scopeLabel} yet
+              </p>
+              <p className="max-w-sm text-[13px] leading-relaxed text-ink-soft">
+                This source is registered but its scraper engine hasn't run — once an engine
+                is wired, its offers will land here automatically.
+              </p>
+              <button
+                onClick={() => applyScope({ type: "all" })}
+                className="mt-1 rounded-full bg-ink px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-paper transition-colors hover:bg-brick"
+              >
+                Back to all offers
+              </button>
+            </div>
           ) : visible.length === 0 ? (
             <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-line bg-card/60 px-6 py-16 text-center">
               <RadarEmpty />
@@ -380,7 +433,7 @@ export default function App() {
                 {scope.type !== "all" && (
                   <button
                     onClick={() => applyScope({ type: "all" })}
-                    className="rounded-full bg-ink px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-paper transition-colors hover:bg-pine"
+                    className="rounded-full bg-ink px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-paper transition-colors hover:bg-brick"
                   >
                     Clear scope
                   </button>
@@ -392,8 +445,8 @@ export default function App() {
                   }}
                   className={`rounded-full px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] transition-colors ${
                     scope.type !== "all"
-                      ? "border border-line text-ink-soft hover:border-pine hover:text-pine"
-                      : "bg-ink text-paper hover:bg-pine"
+                      ? "border border-line text-ink-soft hover:border-brick hover:text-brick"
+                      : "bg-ink text-paper hover:bg-brick"
                   }`}
                 >
                   Reset sweep
@@ -409,7 +462,12 @@ export default function App() {
           )}
         </section>
 
-        <SourcesLedger onPick={(name) => showToast(`${name} is next on the bench — queued for v0.2`)} />
+        <SourcesLedger
+          custom={customSources}
+          onPick={(name) => showToast(`${name} is queued — register it from Browse to fast-track`)}
+          onAdd={() => setAddOpen(true)}
+          onRemove={removeSource}
+        />
       </main>
 
       <Footer />
@@ -427,17 +485,27 @@ export default function App() {
       <BrowseDrawer
         open={drawerOpen}
         offers={offers}
+        custom={customSources}
         active={scope}
         onApply={applyScope}
         onClose={() => setDrawerOpen(false)}
         onLocked={(name) =>
           showToast(`${name} is still queued — Al Rajhi is the only live source for now`)
         }
+        onAdd={() => setAddOpen(true)}
+      />
+
+      <AddSourceModal
+        open={addOpen}
+        sources={customSources}
+        onAdd={addSource}
+        onRemove={removeSource}
+        onClose={() => setAddOpen(false)}
       />
 
       {toast && (
-        <div className="toast-up fixed bottom-6 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-full border border-term-line bg-term px-4 py-2.5 font-mono text-[11.5px] tracking-[0.06em] text-paper shadow-[0_18px_40px_-12px_rgba(12,23,18,0.6)]">
-          <CheckIcon className="h-3.5 w-3.5 text-lime" />
+        <div className="toast-up fixed bottom-6 left-1/2 z-[80] flex -translate-x-1/2 items-center gap-2 rounded-full border border-term-line bg-term px-4 py-2.5 font-mono text-[11.5px] tracking-[0.06em] text-paper shadow-[0_18px_40px_-12px_rgba(25,16,16,0.6)]">
+          <CheckIcon className="h-3.5 w-3.5 text-flare" />
           {toast}
         </div>
       )}

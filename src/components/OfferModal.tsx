@@ -21,7 +21,7 @@ interface Props {
 const TONE_TEXT: Record<string, string> = {
   hot: "text-ember",
   warm: "text-[#a3740c]",
-  ok: "text-pine",
+  ok: "text-brick",
   open: "text-ink-faint",
 };
 
@@ -68,12 +68,12 @@ export default function OfferModal({ offer, scrapedAt, live, onClose, onToast }:
             {offer.image ? (
               <img src={offer.image} alt={offer.merchant} className="absolute inset-0 h-full w-full object-cover" />
             ) : (
-              <div className="absolute inset-0 flex items-center justify-center bg-tint font-display text-7xl font-extrabold text-pine/30">
+              <div className="absolute inset-0 flex items-center justify-center bg-tint font-display text-7xl font-extrabold text-brick/30">
                 {offer.merchant.slice(0, 2).toUpperCase()}
               </div>
             )}
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-term/85 via-term/35 to-transparent p-4 pt-12">
-              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-lime">
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-flare">
                 {CATEGORY_LABEL[offer.category]} · {offer.bank} · {offer.card}
               </p>
               <h2 className="mt-1 font-display text-3xl font-extrabold tracking-tight text-paper">
@@ -106,12 +106,12 @@ export default function OfferModal({ offer, scrapedAt, live, onClose, onToast }:
                   <div className="flex-1">
                     <dt className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-ink-faint">Promo code</dt>
                     <dd className="mt-1 flex items-center gap-2">
-                      <code className="rounded border border-dashed border-pine/50 bg-tint px-2.5 py-1 font-mono text-[13px] font-bold tracking-[0.1em] text-pine">
+                      <code className="rounded border border-dashed border-brick/50 bg-tint px-2.5 py-1 font-mono text-[13px] font-bold tracking-[0.1em] text-brick">
                         {offer.code}
                       </code>
                       <button
                         onClick={copyCode}
-                        className="rounded-full bg-ink px-3 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-paper transition-colors hover:bg-pine"
+                        className="rounded-full bg-ink px-3 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-paper transition-colors hover:bg-brick"
                       >
                         Copy
                       </button>
@@ -152,7 +152,7 @@ export default function OfferModal({ offer, scrapedAt, live, onClose, onToast }:
                 href={offer.link}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group flex flex-1 items-center justify-center gap-2 rounded-full bg-pine px-5 py-2.5 font-mono text-[11.5px] font-medium uppercase tracking-[0.14em] text-paper transition-all hover:bg-ink active:scale-[0.98]"
+                className="group flex flex-1 items-center justify-center gap-2 rounded-full bg-brick px-5 py-2.5 font-mono text-[11.5px] font-medium uppercase tracking-[0.14em] text-paper transition-all hover:bg-ink active:scale-[0.98]"
               >
                 Open offer page
                 <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
@@ -163,7 +163,6 @@ export default function OfferModal({ offer, scrapedAt, live, onClose, onToast }:
             </p>
           </div>
         </div>
-
       </div>
     </div>
   );

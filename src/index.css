@@ -5,22 +5,23 @@
   --font-body: "Instrument Sans", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  --color-paper: #f1f4ee;
-  --color-card: #fbfcf8;
-  --color-ink: #14231b;
-  --color-ink-soft: #43584c;
-  --color-ink-faint: #75887c;
-  --color-line: #d9e2d5;
-  --color-pine: #0e6b45;
-  --color-mint: #16a66b;
-  --color-lime: #35c77e;
-  --color-tint: #e2efe6;
+  /* red theme · v0.2 */
+  --color-paper: #f3efec;
+  --color-card: #fbf9f6;
+  --color-ink: #271312;
+  --color-ink-soft: #5d4744;
+  --color-ink-faint: #8c7672;
+  --color-line: #e1d7d0;
+  --color-brick: #c8102e;
+  --color-flare: #ff5747;
+  --color-live: #1fae67;
+  --color-tint: #f8e1de;
   --color-amber: #e8b93e;
   --color-amber-soft: #fdf3d8;
   --color-ember: #d94f2b;
   --color-ember-soft: #fbe6de;
-  --color-term: #0c1712;
-  --color-term-line: #1e3327;
+  --color-term: #191010;
+  --color-term-line: #35211f;
 }
 
 html {
@@ -32,22 +33,22 @@ body {
   color: var(--color-ink);
   font-family: var(--font-body);
   background-image:
-    radial-gradient(1100px 520px at 8% -6%, rgba(22, 166, 107, 0.09), transparent 62%),
+    radial-gradient(1100px 520px at 8% -6%, rgba(200, 16, 46, 0.08), transparent 62%),
     radial-gradient(900px 480px at 100% 12%, rgba(232, 185, 62, 0.1), transparent 60%),
-    radial-gradient(rgba(20, 35, 27, 0.075) 1px, transparent 1px);
+    radial-gradient(rgba(39, 19, 18, 0.07) 1px, transparent 1px);
   background-size: auto, auto, 22px 22px;
   background-attachment: fixed;
 }
 
 ::selection {
-  background: var(--color-lime);
+  background: var(--color-flare);
   color: var(--color-term);
 }
 
 /* ---------- terminal ---------- */
 .term-scroll::-webkit-scrollbar { width: 8px; }
 .term-scroll::-webkit-scrollbar-track { background: transparent; }
-.term-scroll::-webkit-scrollbar-thumb { background: #24402f; border-radius: 8px; }
+.term-scroll::-webkit-scrollbar-thumb { background: #3d2523; border-radius: 8px; }
 
 @keyframes blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0; } }
 .caret { animation: blink 1s steps(1) infinite; }

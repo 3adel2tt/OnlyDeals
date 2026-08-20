@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { BrowseScope, Offer } from "../types";
+import type { BrowseScope, CustomSource, Offer } from "../types";
 import { CATEGORY_LABEL } from "../types";
 import {
   BackIcon,
@@ -7,6 +7,7 @@ import {
   CardIcon,
   ChevronRightIcon,
   CloseIcon,
+  PlusIcon,
   SearchIcon,
   StoreIcon,
 } from "./icons";
@@ -28,6 +29,7 @@ interface VendorGroup {
   count: number;
   image: string;
   categories: string[];
+  registered?: boolean;
 }
 
 const QUEUED_BANKS = [
@@ -40,13 +42,15 @@ const QUEUED_BANKS = [
 interface Props {
   open: boolean;
   offers: Offer[];
+  custom: CustomSource[];
   active: BrowseScope;
   onApply: (scope: BrowseScope) => void;
   onClose: () => void;
   onLocked: (name: string) => void;
+  onAdd: () => void;
 }
 
-export default function BrowseDrawer({ open, offers, active, onApply, onClose, onLocked }: Props) {
+export default function BrowseDrawer({ open, offers, custom, active, onApply, onClose, onLocked, onAdd }: Props) {
   const [tab, setTab] = useState<"banks" | "vendors">("banks");
   const [drillBank, setDrillBank] = useState<string | null>(null);
   const [vendorQuery, setVendorQuery] = useState("");
@@ -83,13 +87,19 @@ export default function BrowseDrawer({ open, offers, active, onApply, onClose, o
     }));
   }, [offers]);
 
-  const vendorGroups = useMemo<VendorGroup[]>(() => {
+  const customBanks = useMemo(() => custom.filter((c) => c.kind === "bank"), [custom]);
+  const customVendors = useMemo(() => custom.filter((c) => c.kind === "vendor"), [custom]);
+
+  const indexedCount = (name: string) =>
+    offers.filter((o) => o.bank === name || o.merchant === name).length;
+
+  const allVendors = useMemo<VendorGroup[]>(() => {
     const map = new Map<string, Offer[]>();
     for (const o of offers) {
       if (!map.has(o.merchant)) map.set(o.merchant, []);
       map.get(o.merchant)!.push(o);
     }
-    return Array.from(map.entries())
+    const rows: VendorGroup[] = Array.from(map.entries())
       .map(([vendor, list]) => ({
         vendor,
         count: list.length,
@@ -97,17 +107,29 @@ export default function BrowseDrawer({ open, offers, active, onApply, onClose, o
         categories: Array.from(new Set(list.map((o) => CATEGORY_LABEL[o.category]))),
       }))
       .sort((a, b) => b.count - a.count || a.vendor.localeCompare(b.vendor));
-  }, [offers]);
+    for (const r of customVendors) {
+      if (!rows.some((v) => v.vendor.toLowerCase() === r.name.toLowerCase())) {
+        rows.push({
+          vendor: r.name,
+          count: 0,
+          image: "",
+          categories: [r.category ? CATEGORY_LABEL[r.category] : "registered"],
+          registered: true,
+        });
+      }
+    }
+    return rows;
+  }, [offers, customVendors]);
 
   const filteredVendors = useMemo(() => {
     const q = vendorQuery.trim().toLowerCase();
-    if (!q) return vendorGroups;
-    return vendorGroups.filter(
+    if (!q) return allVendors;
+    return allVendors.filter(
       (v) =>
         v.vendor.toLowerCase().includes(q) ||
         v.categories.some((c) => c.toLowerCase().includes(q)),
     );
-  }, [vendorGroups, vendorQuery]);
+  }, [allVendors, vendorQuery]);
 
   if (!open) return null;
 
@@ -130,7 +152,7 @@ export default function BrowseDrawer({ open, offers, active, onApply, onClose, o
         {/* head */}
         <div className="flex items-center gap-3 border-b border-term-line px-5 pb-4 pt-5">
           <div>
-            <p className="font-mono text-[9.5px] uppercase tracking-[0.24em] text-[#7e9a88]">
+            <p className="font-mono text-[9.5px] uppercase tracking-[0.24em] text-[#8f766f]">
               /// browse the radar
             </p>
             <h2 className="mt-1 font-display text-xl font-extrabold tracking-tight">
@@ -139,7 +161,7 @@ export default function BrowseDrawer({ open, offers, active, onApply, onClose, o
           </div>
           <button
             onClick={onClose}
-            className="ml-auto rounded-full border border-term-line p-2 text-[#9db8a6] transition-all hover:rotate-90 hover:border-[#f07a5f]/60 hover:text-[#f07a5f]"
+            className="ml-auto rounded-full border border-term-line p-2 text-[#a9928b] transition-all hover:rotate-90 hover:border-[#f07a5f]/60 hover:text-[#f07a5f]"
             aria-label="Close"
           >
             <CloseIcon />
@@ -147,7 +169,7 @@ export default function BrowseDrawer({ open, offers, active, onApply, onClose, o
         </div>
 
         {/* mode switch */}
-        <div className="mx-5 mt-4 grid grid-cols-2 gap-1 rounded-lg border border-term-line bg-[#0a130e] p-1">
+        <div className="mx-5 mt-4 grid grid-cols-2 gap-1 rounded-lg border border-term-line bg-[#120d0c] p-1">
           {(
             [
               { id: "banks", label: "By bank", Icon: BankIcon },
@@ -159,8 +181,8 @@ export default function BrowseDrawer({ open, offers, active, onApply, onClose, o
               onClick={() => setTab(id)}
               className={`flex items-center justify-center gap-1.5 rounded-md px-2 py-2 font-mono text-[10.5px] uppercase tracking-[0.12em] transition-all ${
                 tab === id
-                  ? "bg-lime font-semibold text-term shadow-[0_2px_10px_-2px_rgba(53,199,126,0.6)]"
-                  : "text-[#7e9a88] hover:text-paper"
+                  ? "bg-flare font-semibold text-[#2b0c08] shadow-[0_2px_10px_-2px_rgba(255,87,71,0.6)]"
+                  : "text-[#8f766f] hover:text-paper"
               }`}
             >
               <Icon className="h-3.5 w-3.5" />
@@ -181,37 +203,76 @@ export default function BrowseDrawer({ open, offers, active, onApply, onClose, o
                   style={{ animationDelay: `${i * 45}ms` }}
                   className={`row-in group flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left transition-all hover:translate-x-1 ${
                     (active.type === "bank-card" || active.type === "bank") && active.bank === b.bank
-                      ? "border-lime/50 bg-lime/10"
-                      : "border-term-line bg-[#0f1c15] hover:border-lime/40"
+                      ? "border-flare/50 bg-flare/10"
+                      : "border-term-line bg-[#1f1412] hover:border-flare/40"
                   }`}
                 >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-lime/30 bg-lime/10 font-display text-[13px] font-extrabold text-lime">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-flare/30 bg-flare/10 font-display text-[13px] font-extrabold text-flare">
                     {initials(b.bank)}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-display text-[14.5px] font-bold tracking-tight">
                       {b.bank}
                     </span>
-                    <span className="mt-0.5 flex items-center gap-1.5 font-mono text-[9.5px] uppercase tracking-[0.12em] text-[#7e9a88]">
-                      <span className="relative inline-block h-1.5 w-1.5 rounded-full bg-mint text-mint ping-dot" />
+                    <span className="mt-0.5 flex items-center gap-1.5 font-mono text-[9.5px] uppercase tracking-[0.12em] text-[#8f766f]">
+                      <span className="relative inline-block h-1.5 w-1.5 rounded-full bg-live text-live ping-dot" />
                       live source · {b.cards.length} cards
                     </span>
                   </span>
-                  <span className="rounded-full bg-lime/15 px-2 py-0.5 font-mono text-[10px] font-semibold text-lime">
+                  <span className="rounded-full bg-flare/15 px-2 py-0.5 font-mono text-[10px] font-semibold text-flare">
                     {b.count}
                   </span>
-                  <ChevronRightIcon className="h-3.5 w-3.5 text-[#55705f] transition-transform group-hover:translate-x-0.5 group-hover:text-lime" />
+                  <ChevronRightIcon className="h-3.5 w-3.5 text-[#6b544e] transition-transform group-hover:translate-x-0.5 group-hover:text-flare" />
                 </button>
               ))}
 
               {offers.length === 0 && (
-                <p className="px-2 py-6 text-center font-mono text-[11px] text-[#55705f]">
+                <p className="px-2 py-6 text-center font-mono text-[11px] text-[#6b544e]">
                   Waiting for the first scrape pass…
-                  <span className="caret ml-1 inline-block h-[11px] w-[6px] translate-y-[1px] bg-lime" />
+                  <span className="caret ml-1 inline-block h-[11px] w-[6px] translate-y-[1px] bg-flare" />
                 </p>
               )}
 
-              <p className="px-2 pb-1 pt-4 font-mono text-[9.5px] uppercase tracking-[0.2em] text-[#55705f]">
+              {customBanks.length > 0 && (
+                <>
+                  <p className="px-2 pb-1 pt-4 font-mono text-[9.5px] uppercase tracking-[0.2em] text-[#6b544e]">
+                    ── your registry
+                  </p>
+                  {customBanks.map((c, i) => {
+                    const n = indexedCount(c.name);
+                    const isActive = active.type === "bank" && active.bank === c.name;
+                    return (
+                      <button
+                        key={c.id}
+                        onClick={() => onApply({ type: "bank", bank: c.name })}
+                        style={{ animationDelay: `${(i + 1) * 45}ms` }}
+                        className={`row-in group flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all hover:translate-x-1 ${
+                          isActive
+                            ? "border-flare/50 bg-flare/10"
+                            : "border-dashed border-term-line bg-transparent hover:border-flare/40"
+                        }`}
+                      >
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-term-line bg-[#1f1412] font-display text-[11px] font-extrabold text-[#8f766f]">
+                          {initials(c.name)}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-display text-[13.5px] font-bold tracking-tight text-[#d8c8c2]">
+                            {c.name}
+                          </span>
+                          <span className="block font-mono text-[9px] uppercase tracking-[0.12em] text-[#6b544e]">
+                            {n > 0 ? `${n} offers indexed` : "registered · engine pending"}
+                          </span>
+                        </span>
+                        <span className="rounded-full border border-flare/40 bg-flare/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-flare">
+                          registered
+                        </span>
+                      </button>
+                    );
+                  })}
+                </>
+              )}
+
+              <p className="px-2 pb-1 pt-4 font-mono text-[9.5px] uppercase tracking-[0.2em] text-[#6b544e]">
                 ── in the pipeline
               </p>
               {QUEUED_BANKS.map((b, i) => (
@@ -221,18 +282,18 @@ export default function BrowseDrawer({ open, offers, active, onApply, onClose, o
                   style={{ animationDelay: `${(i + 2) * 45}ms` }}
                   className="row-in group flex w-full items-center gap-3 rounded-lg border border-dashed border-term-line px-3 py-2.5 text-left opacity-70 transition-all hover:translate-x-1 hover:border-amber/40 hover:opacity-100"
                 >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-term-line bg-[#0f1c15] font-display text-[11px] font-extrabold text-[#55705f]">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-term-line bg-[#1f1412] font-display text-[11px] font-extrabold text-[#6b544e]">
                     {initials(b.name)}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-display text-[13.5px] font-bold tracking-tight text-[#9db8a6]">
+                    <span className="block truncate font-display text-[13.5px] font-bold tracking-tight text-[#a9928b]">
                       {b.name}
                     </span>
-                    <span className="block font-mono text-[9px] uppercase tracking-[0.12em] text-[#55705f]">
+                    <span className="block font-mono text-[9px] uppercase tracking-[0.12em] text-[#6b544e]">
                       {b.note}
                     </span>
                   </span>
-                  <span className="rounded-full border border-term-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-[#55705f]">
+                  <span className="rounded-full border border-term-line px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-[#6b544e]">
                     queued
                   </span>
                 </button>
@@ -245,13 +306,13 @@ export default function BrowseDrawer({ open, offers, active, onApply, onClose, o
             <div>
               <button
                 onClick={() => setDrillBank(null)}
-                className="mb-3 flex items-center gap-2 rounded-full border border-term-line px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-[#9db8a6] transition-colors hover:border-lime/50 hover:text-lime"
+                className="mb-3 flex items-center gap-2 rounded-full border border-term-line px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-[#a9928b] transition-colors hover:border-flare/50 hover:text-flare"
               >
                 <BackIcon className="h-3 w-3" />
                 All banks
               </button>
 
-              <p className="px-2 pb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[#7e9a88]">
+              <p className="px-2 pb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[#8f766f]">
                 {drilled.count} offers across {drilled.cards.length} card tiers — pick a card:
               </p>
 
@@ -268,11 +329,11 @@ export default function BrowseDrawer({ open, offers, active, onApply, onClose, o
                       style={{ animationDelay: `${i * 50}ms` }}
                       className={`row-in group flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left transition-all hover:translate-x-1 ${
                         isActive
-                          ? "border-lime/50 bg-lime/10"
-                          : "border-term-line bg-[#0f1c15] hover:border-lime/40"
+                          ? "border-flare/50 bg-flare/10"
+                          : "border-term-line bg-[#1f1412] hover:border-flare/40"
                       }`}
                     >
-                      <CardIcon className={`h-5 w-5 shrink-0 ${isActive ? "text-lime" : "text-[#55705f] group-hover:text-lime"}`} />
+                      <CardIcon className={`h-5 w-5 shrink-0 ${isActive ? "text-flare" : "text-[#6b544e] group-hover:text-flare"}`} />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate font-display text-[14px] font-bold tracking-tight">
                           {c.card}
@@ -290,16 +351,16 @@ export default function BrowseDrawer({ open, offers, active, onApply, onClose, o
                               ))}
                             </span>
                           ) : (
-                            <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#55705f]">
+                            <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#6b544e]">
                               no imagery yet
                             </span>
                           )}
                         </span>
                       </span>
-                      <span className="font-mono text-[10px] font-semibold text-lime">
+                      <span className="font-mono text-[10px] font-semibold text-flare">
                         {c.count} offer{c.count > 1 ? "s" : ""}
                       </span>
-                      <ChevronRightIcon className="h-3.5 w-3.5 text-[#55705f] transition-transform group-hover:translate-x-0.5 group-hover:text-lime" />
+                      <ChevronRightIcon className="h-3.5 w-3.5 text-[#6b544e] transition-transform group-hover:translate-x-0.5 group-hover:text-flare" />
                     </button>
                   );
                 })}
@@ -307,7 +368,7 @@ export default function BrowseDrawer({ open, offers, active, onApply, onClose, o
 
               <button
                 onClick={() => onApply({ type: "bank", bank: drilled.bank })}
-                className="mt-3 w-full rounded-lg border border-dashed border-term-line py-2 font-mono text-[9.5px] uppercase tracking-[0.16em] text-[#55705f] transition-colors hover:border-amber/40 hover:text-amber"
+                className="mt-3 w-full rounded-lg border border-dashed border-term-line py-2 font-mono text-[9.5px] uppercase tracking-[0.16em] text-[#6b544e] transition-colors hover:border-amber/40 hover:text-amber"
               >
                 view every {drilled.bank} offer →
               </button>
@@ -318,12 +379,12 @@ export default function BrowseDrawer({ open, offers, active, onApply, onClose, o
           {tab === "vendors" && (
             <div>
               <div className="relative mb-3">
-                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#55705f]" />
+                <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#6b544e]" />
                 <input
                   value={vendorQuery}
                   onChange={(e) => setVendorQuery(e.target.value)}
                   placeholder="Filter vendors…"
-                  className="w-full rounded-lg border border-term-line bg-[#0a130e] py-2 pl-9 pr-3 font-mono text-[11.5px] text-paper placeholder:text-[#55705f] focus:border-lime/50 focus:outline-none"
+                  className="w-full rounded-lg border border-term-line bg-[#120d0c] py-2 pl-9 pr-3 font-mono text-[11.5px] text-paper placeholder:text-[#6b544e] focus:border-flare/50 focus:outline-none"
                 />
               </div>
 
@@ -336,9 +397,11 @@ export default function BrowseDrawer({ open, offers, active, onApply, onClose, o
                       onClick={() => onApply({ type: "vendor", vendor: v.vendor })}
                       style={{ animationDelay: `${i * 30}ms` }}
                       className={`row-in group flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all hover:translate-x-1 ${
-                        isActive
-                          ? "border-lime/50 bg-lime/10"
-                          : "border-term-line bg-[#0f1c15] hover:border-lime/40"
+                        v.registered && !isActive
+                          ? "border-dashed border-term-line bg-transparent hover:border-flare/40"
+                          : isActive
+                            ? "border-flare/50 bg-flare/10"
+                            : "border-term-line bg-[#1f1412] hover:border-flare/40"
                       }`}
                     >
                       {v.image ? (
@@ -348,27 +411,33 @@ export default function BrowseDrawer({ open, offers, active, onApply, onClose, o
                           className="h-10 w-10 shrink-0 rounded-md border border-term-line object-cover transition-transform duration-300 group-hover:scale-105"
                         />
                       ) : (
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-term-line bg-[#0a130e] font-display text-[12px] font-extrabold text-[#55705f]">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-term-line bg-[#120d0c] font-display text-[12px] font-extrabold text-[#6b544e]">
                           {initials(v.vendor)}
                         </span>
                       )}
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate font-display text-[14px] font-bold tracking-tight">
+                        <span className={`block truncate font-display text-[14px] font-bold tracking-tight ${v.registered ? "text-[#d8c8c2]" : ""}`}>
                           {v.vendor}
                         </span>
-                        <span className="block truncate font-mono text-[9.5px] uppercase tracking-[0.1em] text-[#7e9a88]">
+                        <span className="block truncate font-mono text-[9.5px] uppercase tracking-[0.1em] text-[#8f766f]">
                           {v.categories.join(" · ")}
                         </span>
                       </span>
-                      <span className="rounded-full bg-lime/15 px-2 py-0.5 font-mono text-[10px] font-semibold text-lime">
-                        {v.count}
-                      </span>
-                      <ChevronRightIcon className="h-3.5 w-3.5 text-[#55705f] transition-transform group-hover:translate-x-0.5 group-hover:text-lime" />
+                      {v.count > 0 ? (
+                        <span className="rounded-full bg-flare/15 px-2 py-0.5 font-mono text-[10px] font-semibold text-flare">
+                          {v.count}
+                        </span>
+                      ) : (
+                        <span className="rounded-full border border-flare/40 bg-flare/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-flare">
+                          registered
+                        </span>
+                      )}
+                      <ChevronRightIcon className="h-3.5 w-3.5 text-[#6b544e] transition-transform group-hover:translate-x-0.5 group-hover:text-flare" />
                     </button>
                   );
                 })}
                 {filteredVendors.length === 0 && (
-                  <p className="px-2 py-6 text-center font-mono text-[11px] text-[#55705f]">
+                  <p className="px-2 py-6 text-center font-mono text-[11px] text-[#6b544e]">
                     No vendors match “{vendorQuery}”.
                   </p>
                 )}
@@ -379,8 +448,15 @@ export default function BrowseDrawer({ open, offers, active, onApply, onClose, o
 
         {/* foot */}
         <div className="border-t border-term-line px-5 py-3">
-          <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#55705f]">
-            1 source live · 5 engines queued · schema offer.v1
+          <button
+            onClick={onAdd}
+            className="mb-2 flex w-full items-center justify-center gap-2 rounded-full bg-flare px-4 py-2.5 font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#2b0c08] transition-all hover:bg-paper active:scale-[0.97]"
+          >
+            <PlusIcon className="h-3.5 w-3.5" />
+            register a bank / vendor
+          </button>
+          <p className="text-center font-mono text-[9px] uppercase tracking-[0.16em] text-[#6b544e]">
+            1 source live · {custom.length} registered · schema offer.v1
           </p>
         </div>
       </aside>

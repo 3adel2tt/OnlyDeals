@@ -2,17 +2,21 @@ interface P {
   className?: string;
 }
 
+/** Radar ring with a percent sign — the slash reads as the sweep line. */
 export function RadarMark({ className = "w-8 h-8", active = false }: P & { active?: boolean }) {
   return (
     <svg viewBox="0 0 32 32" className={`${className} ${active ? "" : "radar-idle"}`} fill="none">
-      <circle cx="16" cy="16" r="13" stroke="currentColor" strokeWidth="2" />
-      <circle cx="16" cy="16" r="7.5" stroke="currentColor" strokeWidth="1.4" opacity="0.45" />
-      <circle cx="16" cy="16" r="2.2" fill="currentColor" />
+      <circle cx="16" cy="16" r="13.5" stroke="currentColor" strokeWidth="2" />
+      <circle cx="16" cy="16" r="9" stroke="currentColor" strokeWidth="1.2" opacity="0.3" />
       <g className="radar-sweep">
-        <path d="M16 16 L29 11" stroke="var(--color-amber)" strokeWidth="2.4" strokeLinecap="round" />
-        <path d="M16 16 L27.5 19.5" stroke="var(--color-amber)" strokeWidth="1.4" strokeLinecap="round" opacity="0.4" />
+        <path d="M16 16 L29 11" stroke="var(--color-amber)" strokeWidth="2.2" strokeLinecap="round" />
+        <path d="M16 16 L27.5 19.5" stroke="var(--color-amber)" strokeWidth="1.2" strokeLinecap="round" opacity="0.4" />
       </g>
-      <circle cx="22.5" cy="9.5" r="1.6" fill="var(--color-lime)" />
+      {/* % */}
+      <path d="M20.9 10.3 11.1 21.7" stroke="var(--color-brick)" strokeWidth="2.5" strokeLinecap="round" />
+      <circle cx="11.5" cy="11.5" r="3" stroke="var(--color-brick)" strokeWidth="2.1" />
+      <circle cx="20.5" cy="20.5" r="3" stroke="var(--color-brick)" strokeWidth="2.1" />
+      <circle cx="24.6" cy="7.6" r="1.6" fill="var(--color-flare)" />
     </svg>
   );
 }
@@ -127,11 +131,27 @@ export function StoreIcon({ className = "w-4 h-4" }: P) {
   );
 }
 
-export function InboxIcon({ className = "w-4 h-4" }: P) {
+export function PlusIcon({ className = "w-4 h-4" }: P) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M10 4v12M4 10h12" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function TrashIcon({ className = "w-4 h-4" }: P) {
   return (
     <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path d="M3 12.2V6.6A1.6 1.6 0 0 1 4.6 5h10.8A1.6 1.6 0 0 1 17 6.6v5.6" strokeLinecap="round" />
-      <path d="M3 12.2h4.1l1.2 1.9h3.4l1.2-1.9H17v1.2A1.6 1.6 0 0 1 15.4 15H4.6A1.6 1.6 0 0 1 3 13.4v-1.2Z" strokeLinejoin="round" />
+      <path d="M4 5.5h12M8 5.5V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M5.5 5.5l.7 9.4a1.5 1.5 0 0 0 1.5 1.4h4.6a1.5 1.5 0 0 0 1.5-1.4l.7-9.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8.2 8.5v4M11.8 8.5v4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function PulseIcon({ className = "w-4 h-4" }: P) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M2 10h3.5l2-4.5 3 9 2.5-4.5H18" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
