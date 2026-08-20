@@ -156,6 +156,14 @@ export function PulseIcon({ className = "w-4 h-4" }: P) {
   );
 }
 
+export function DownloadIcon({ className = "w-4 h-4" }: P) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.7">
+      <path d="M10 3v9m0 0 3.2-3.2M10 12 6.8 8.8M4 14.5V16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function StarIcon({
   className = "w-4 h-4",
   filled = false,

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { LogLine, ScrapeStatus } from "../types";
+import type { FeedStatus, LogLine } from "../types";
 
 const COLOR: Record<LogLine["kind"], string> = {
   sys: "text-flare",
@@ -11,10 +11,11 @@ const COLOR: Record<LogLine["kind"], string> = {
 
 interface Props {
   logs: LogLine[];
-  status: ScrapeStatus;
+  status: FeedStatus;
 }
 
 export default function Terminal({ logs, status }: Props) {
+  const running = status === "syncing";
   const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -29,18 +30,18 @@ export default function Terminal({ logs, status }: Props) {
         <span className="h-2.5 w-2.5 rounded-full bg-amber" />
         <span className="h-2.5 w-2.5 rounded-full bg-flare" />
         <span className="ml-2 font-mono text-[11px] tracking-[0.1em] text-[#8f766f]">
-          scrape.log — engine.ts · 3 sources
+          feed.log — n8n ingest reader
         </span>
         <span
           className={`ml-auto rounded-full px-2.5 py-0.5 font-mono text-[9.5px] uppercase tracking-[0.18em] ${
-            status === "running"
+            running
               ? "bg-amber/15 text-amber"
               : status === "done"
                 ? "bg-live/15 text-live"
                 : "bg-paper/5 text-[#8f766f]"
           }`}
         >
-          {status === "running" ? "running" : status === "done" ? "complete" : "idle"}
+          {running ? "syncing" : status === "done" ? "synced" : "idle"}
         </span>
       </div>
 
@@ -58,7 +59,7 @@ export default function Terminal({ logs, status }: Props) {
             {l.text}
           </p>
         ))}
-        {status === "running" && (
+        {running && (
           <span className="caret inline-block h-[13px] w-[7px] translate-y-[2px] bg-flare" />
         )}
       </div>

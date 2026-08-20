@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { BrowseScope, Category, CustomSource, LogLine, Offer, ScrapeStatus, SourceOutcome, User } from "./types";
+import type {
+  BrowseScope,
+  Category,
+  CustomSource,
+  FeedPayload,
+  FeedProvenance,
+  FeedStatus,
+  LogLine,
+  Offer,
+  SourceOutcome,
+  User,
+} from "./types";
 import { CATEGORY_LABEL } from "./types";
-import { runScrape } from "./scraper/engine";
+import { FEED_URL, loadFeed, PROVENANCE_NOTE } from "./lib/feed";
 import { daysLeft, formatClock } from "./lib/format";
 import { ensureSeeded, getSession, logout } from "./lib/auth";
 import {
@@ -11,6 +22,7 @@ import {
   toggleFollow,
   vendorKey,
 } from "./lib/follows";
+import AdminApp from "./components/AdminApp";
 import TopBar from "./components/TopBar";
 import Ticker from "./components/Ticker";
 import Terminal from "./components/Terminal";
@@ -18,7 +30,6 @@ import OfferTile from "./components/OfferTile";
 import OfferModal from "./components/OfferModal";
 import SourcesLedger from "./components/SourcesLedger";
 import BrowseDrawer from "./components/BrowseDrawer";
-import AddSourceModal from "./components/AddSourceModal";
 import AuthModal from "./components/AuthModal";
 import Footer from "./components/Footer";
 import {
@@ -32,7 +43,12 @@ import {
 
 type SortKey = "expiring" | "value" | "recent";
 
+const ADMIN_ROUTE = "adminn";
 const REGISTRY_KEY = "offradar.registry.v1";
+
+function getRoute(): string {
+  return window.location.hash.replace(/^#\/?/, "").split("?")[0];
+}
 
 function loadRegistry(): CustomSource[] {
   try {
@@ -42,6 +58,8 @@ function loadRegistry(): CustomSource[] {
     return [];
   }
 }
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function SkeletonTile() {
   return (
@@ -57,13 +75,28 @@ function SkeletonTile() {
   );
 }
 
+/* ---------------- router ---------------- */
+
 export default function App() {
-  const [offers, setOffers] = useState<Offer[]>([]);
-  const [status, setStatus] = useState<ScrapeStatus>("idle");
+  const [route, setRoute] = useState(getRoute);
+
+  useEffect(() => {
+    const onHash = () => setRoute(getRoute());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  return route === ADMIN_ROUTE ? <AdminApp /> : <SiteApp />;
+}
+
+/* ---------------- public site: pure feed reader ---------------- */
+
+function SiteApp() {
+  const [payload, setPayload] = useState<FeedPayload | null>(null);
+  const [feedStatus, setFeedStatus] = useState<FeedStatus>("idle");
+  const [provenance, setProvenance] = useState<FeedProvenance | null>(null);
+  const [lastSync, setLastSync] = useState<number | null>(null);
   const [logs, setLogs] = useState<LogLine[]>([]);
-  const [scrapedAt, setScrapedAt] = useState<number | null>(null);
-  const [live, setLive] = useState(false);
-  const [note, setNote] = useState("");
   const [selected, setSelected] = useState<Offer | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -71,23 +104,20 @@ export default function App() {
   const [sort, setSort] = useState<SortKey>("expiring");
   const [scope, setScope] = useState<BrowseScope>({ type: "all" });
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [addOpen, setAddOpen] = useState(false);
-  const [customSources, setCustomSources] = useState<CustomSource[]>(loadRegistry);
+  const [customSources] = useState<CustomSource[]>(loadRegistry);
   const [user, setUser] = useState<User | null>(null);
   const [follows, setFollows] = useState<string[]>([]);
   const [view, setView] = useState<"all" | "my">("all");
   const [authOpen, setAuthOpen] = useState(false);
-  const [authIntent, setAuthIntent] = useState<"generic" | "admin" | "follow">("generic");
-  const [outcomes, setOutcomes] = useState<SourceOutcome[]>([]);
-  const [watch, setWatch] = useState(true);
+  const [authIntent, setAuthIntent] = useState<"generic" | "follow">("generic");
   const [, setTick] = useState(0);
 
   const logId = useRef(0);
-  const running = useRef(false);
+  const syncing = useRef(false);
   const started = useRef(false);
+  const followsLoadedRef = useRef(false);
   const toastTimer = useRef<number | undefined>(undefined);
   const searchRef = useRef<HTMLInputElement>(null);
-  const followsLoadedRef = useRef(false);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -95,77 +125,67 @@ export default function App() {
     toastTimer.current = window.setTimeout(() => setToast(null), 2600);
   }, []);
 
-  const runPass = useCallback(async () => {
-    if (running.current) return;
-    running.current = true;
-    setStatus("running");
+  const syncPass = useCallback(async () => {
+    if (syncing.current) return;
+    syncing.current = true;
+    setFeedStatus("syncing");
     setLogs([]);
-    const result = await runScrape((kind, text) => {
-      setLogs((prev) => [
-        ...prev,
-        { id: ++logId.current, time: formatClock(Date.now()), kind, text },
-      ]);
-    });
-    setOffers(result.offers);
-    setLive(result.live);
-    setNote(result.note);
-    setScrapedAt(result.scrapedAt);
-    setOutcomes(result.outcomes);
-    setStatus("done");
-    running.current = false;
-    const liveN = result.outcomes.filter((o) => o.status === "live").length;
-    showToast(
-      liveN > 0
-        ? `Pass complete — ${result.offers.length} offers · ${liveN} source${liveN === 1 ? "" : "s"} live`
-        : `Pass complete — ${result.offers.length} offers from snapshot`,
-    );
+    const log = (kind: LogLine["kind"], text: string) =>
+      setLogs((prev) => [...prev, { id: ++logId.current, time: formatClock(Date.now()), kind, text }]);
+
+    log("sys", "offradar v0.4 · feed sync start");
+    if (FEED_URL) log("info", `GET ${FEED_URL}`);
+    else log("warn", "FEED_URL not configured (src/lib/feed.ts) — checking local ingest store");
+    await sleep(420);
+
+    const res = await loadFeed();
+    if (res.provenance === "remote") log("ok", `remote feed received · generator ${res.payload.generator}`);
+    else if (res.provenance === "local") log("ok", `local ingest store hit · generator ${res.payload.generator}`);
+    else log("warn", "no feed found — serving bundled seed data");
+
+    for (const s of res.payload.sources) {
+      log(
+        s.status === "error" ? "err" : s.status === "live" ? "ok" : "info",
+        `${s.id} · ${s.status} · ${s.count} offers — ${s.note}`,
+      );
+    }
+    log("sys", `sync complete — ${res.payload.offers.length} offers on the board (${res.provenance})`);
+
+    setPayload(res.payload);
+    setProvenance(res.provenance);
+    setLastSync(res.fetchedAt);
+    setFeedStatus("done");
+    syncing.current = false;
+    showToast(`Feed synced — ${res.payload.offers.length} offers`);
   }, [showToast]);
 
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    runPass();
-  }, [runPass]);
+    syncPass();
+  }, [syncPass]);
 
   // restore session + follows on mount
   useEffect(() => {
     ensureSeeded();
     const u = getSession();
     if (u) {
+      if (u.role === "admin") {
+        // admins live in the control room — the public site is members-only
+        logout();
+        return;
+      }
       setUser(u);
       setFollows(getFollows(u.id));
+      followsLoadedRef.current = true;
     }
   }, []);
-
-  // watch mode — the radar keeps sweeping on its own
-  useEffect(() => {
-    if (!watch) return;
-    const t = window.setInterval(() => {
-      if (!running.current) void runPass();
-    }, 120_000);
-    return () => window.clearInterval(t);
-  }, [watch, runPass]);
-
-  const toggleWatch = useCallback(() => {
-    const next = !watch;
-    setWatch(next);
-    showToast(next ? "Watch on — re-scanning every 2 min" : "Watch off — manual passes only");
-  }, [watch, showToast]);
 
   // keep relative timestamps fresh
   useEffect(() => {
     const t = window.setInterval(() => setTick((x) => x + 1), 30_000);
     return () => window.clearInterval(t);
   }, []);
-
-  // persist the source registry
-  useEffect(() => {
-    try {
-      localStorage.setItem(REGISTRY_KEY, JSON.stringify(customSources));
-    } catch {
-      /* storage unavailable — registry stays in memory */
-    }
-  }, [customSources]);
 
   // "/" focuses search
   useEffect(() => {
@@ -190,24 +210,8 @@ export default function App() {
     }, 60);
   }, []);
 
-  const addSource = useCallback(
-    (s: CustomSource) => {
-      setCustomSources((prev) => [...prev, s]);
-      showToast(`${s.name} registered — queued for its first scrape`);
-    },
-    [showToast],
-  );
-
-  const removeSource = useCallback(
-    (id: string) => {
-      setCustomSources((prev) => prev.filter((s) => s.id !== id));
-      showToast("Removed from registry");
-    },
-    [showToast],
-  );
-
   // ---- auth ----
-  const openAuth = useCallback((intent: "generic" | "admin" | "follow" = "generic") => {
+  const openAuth = useCallback((intent: "generic" | "follow" = "generic") => {
     setAuthIntent(intent);
     setAuthOpen(true);
   }, []);
@@ -216,8 +220,9 @@ export default function App() {
     (u: User) => {
       setUser(u);
       setFollows(getFollows(u.id));
+      followsLoadedRef.current = true;
       setAuthOpen(false);
-      showToast(`Signed in as ${u.displayName}${u.role === "admin" ? " · admin" : ""}`);
+      showToast(`Signed in as ${u.displayName}`);
     },
     [showToast],
   );
@@ -229,19 +234,6 @@ export default function App() {
     setView("all");
     showToast("Signed out — back to the public radar");
   }, [showToast]);
-
-  // gate for admin-only actions (the source registry)
-  const registerGate = useCallback(() => {
-    if (!user) {
-      openAuth("admin");
-      return;
-    }
-    if (user.role !== "admin") {
-      showToast("The registry is admin-only — sign in as the admin to register sources");
-      return;
-    }
-    setAddOpen(true);
-  }, [user, openAuth, showToast]);
 
   // ---- follows ----
   const requireAuthThen = useCallback(
@@ -292,7 +284,6 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     const count = follows.length;
-    // only toast after the first load (avoid on mount)
     if (followsLoadedRef.current) {
       showToast(
         count === 0
@@ -302,6 +293,13 @@ export default function App() {
     }
     followsLoadedRef.current = true;
   }, [follows, user, showToast]);
+
+  // ---- derived feed data ----
+  const offers = useMemo(() => payload?.offers ?? [], [payload]);
+  const outcomes = useMemo<SourceOutcome[]>(() => payload?.sources ?? [], [payload]);
+  const done = feedStatus === "done";
+  const live = provenance === "remote" || provenance === "local";
+  const note = provenance ? PROVENANCE_NOTE[provenance] : "";
 
   // ---- my-radar pool: followed offers only ----
   const pool = useMemo(() => {
@@ -365,13 +363,11 @@ export default function App() {
   return (
     <div id="top" className="min-h-screen">
       <TopBar
-        status={status}
-        live={live}
-        scrapedAt={scrapedAt}
-        watch={watch}
-        onRescrape={runPass}
+        feedStatus={feedStatus}
+        provenance={provenance}
+        lastSync={lastSync}
+        onSync={syncPass}
         onBrowse={() => setDrawerOpen(true)}
-        onToggleWatch={toggleWatch}
         user={user}
         view={view}
         followCount={follows.length}
@@ -382,12 +378,12 @@ export default function App() {
       <Ticker offers={offers} />
 
       <main className="mx-auto max-w-7xl px-4 sm:px-6">
-        {/* intro + terminal */}
+        {/* intro + feed log */}
         <section className="grid gap-6 pt-8 sm:pt-12 lg:grid-cols-[1.15fr_1fr] lg:items-end">
           <div>
             <p className="flex flex-wrap items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.22em] text-brick">
               <span className="inline-block h-2 w-2 bg-brick" />
-              sources 01–03 · parallel crawl · alrajhi · snb · tamara
+              fed by n8n · engines alrajhi + jarir
               {view === "my" && user && (
                 <span className="star-pop inline-flex items-center gap-1 rounded-full bg-amber px-2 py-0.5 text-[9.5px] font-bold text-ink">
                   <StarIcon filled className="h-3 w-3" />
@@ -417,45 +413,46 @@ export default function App() {
               </span>
             </h1>
             <p className="mt-5 max-w-xl text-[14.5px] leading-relaxed text-ink-soft">
-              The radar hits the offers page, strips the marketing, and leaves the numbers:
-              what you save, which card tier qualifies, the code if there is one, and the
-              exact date it dies. Click any tile for the full brief.
+              The scraping runs server-side on n8n — one workflow per source, a master
+              scheduler fanning them out. This board only reads the feed they produce:
+              what you save, which card tier qualifies, the code, the exact date it dies.
             </p>
-            {status === "done" && (
+            {done && (
               <p className="mt-3 flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-faint">
                 <span className={`inline-block h-1.5 w-1.5 rounded-full ${live ? "bg-live" : "bg-amber"}`} />
                 {note}
+                {payload ? ` · generated by ${payload.generator}` : ""}
               </p>
             )}
           </div>
-          <Terminal logs={logs} status={status} />
+          <Terminal logs={logs} status={feedStatus} />
         </section>
 
         {/* stats strip */}
         <section className="mt-8 flex flex-wrap items-stretch gap-px overflow-hidden rounded-xl border border-line bg-line">
           {[
             {
-              label: view === "my" ? "offers followed" : "offers loaded",
-              value: status === "done" ? String(stats.count) : "··",
+              label: view === "my" ? "offers followed" : "offers in feed",
+              value: done ? String(stats.count) : "··",
               sub:
                 view === "my"
                   ? scope.type === "all"
                     ? `${follows.length} followed sources`
                     : scopeLabel.toLowerCase()
                   : scope.type === "all"
-                    ? "al rajhi · card offers"
+                    ? "al rajhi · jarir · offer.v1"
                     : scopeLabel.toLowerCase(),
               hot: false,
             },
             {
               label: "best discount",
-              value: status === "done" && stats.best ? stats.best.discountLabel : "··",
+              value: done && stats.best ? stats.best.discountLabel : "··",
               sub: stats.best ? stats.best.merchant.toLowerCase() : "—",
               hot: false,
             },
             {
               label: "expiring ≤ 7 days",
-              value: status === "done" ? String(stats.expiring) : "··",
+              value: done ? String(stats.expiring) : "··",
               sub: "act on these first",
               hot: stats.expiring > 0,
             },
@@ -525,7 +522,7 @@ export default function App() {
               >
                 <option value="expiring">expiring soonest</option>
                 <option value="value">biggest discount</option>
-                <option value="recent">as scraped</option>
+                <option value="recent">as synced</option>
               </select>
             </label>
           </div>
@@ -548,11 +545,11 @@ export default function App() {
 
           <div className="mt-5 flex items-center justify-between">
             <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-ink-faint">
-              {status === "done"
+              {done
                 ? scope.type !== "all"
                   ? `showing ${visible.length} of ${scoped.length} · in scope`
                   : `showing ${visible.length} of ${offers.length}`
-                : "receiving transmission…"}
+                : "syncing feed…"}
             </p>
             {filtering && (
               <button
@@ -570,26 +567,24 @@ export default function App() {
 
         {/* offer grid */}
         <section className="mt-4">
-          {status !== "done" && offers.length === 0 ? (
+          {!done && offers.length === 0 ? (
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {Array.from({ length: 8 }).map((_, i) => (
                 <SkeletonTile key={i} />
               ))}
             </div>
-          ) : view === "my" && status === "done" && pool.length === 0 ? (
+          ) : view === "my" && done && pool.length === 0 ? (
             <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-amber/60 bg-amber-soft/50 px-6 py-16 text-center">
               <StarIcon filled className="h-12 w-12 text-amber" />
               <p className="font-display text-xl font-bold text-ink">Your radar is empty</p>
               <p className="max-w-sm text-[13px] leading-relaxed text-ink-soft">
                 {follows.length === 0
                   ? "Follow a card tier or a merchant — hit the ★ on any tile, or browse banks and vendors — and only those offers will show up here."
-                  : "None of your followed cards or merchants have offers in the current scrape. Try widening back to all offers."}
+                  : "None of your followed cards or merchants have offers in the current feed. Try widening back to all offers."}
               </p>
               <div className="mt-1 flex flex-wrap justify-center gap-2">
                 <button
-                  onClick={() => {
-                    setDrawerOpen(true);
-                  }}
+                  onClick={() => setDrawerOpen(true)}
                   className="rounded-full bg-ink px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-paper transition-colors hover:bg-brick"
                 >
                   Browse & follow
@@ -602,15 +597,15 @@ export default function App() {
                 </button>
               </div>
             </div>
-          ) : status === "done" && scoped.length === 0 ? (
+          ) : done && scoped.length === 0 ? (
             <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-line bg-card/60 px-6 py-16 text-center">
               <RadarEmpty />
               <p className="font-display text-xl font-bold text-ink">
-                Nothing indexed for {scopeLabel} yet
+                Nothing in the feed for {scopeLabel} yet
               </p>
               <p className="max-w-sm text-[13px] leading-relaxed text-ink-soft">
-                This source is registered but its scraper engine hasn't run — once an engine
-                is wired, its offers will land here automatically.
+                This source hasn't posted offers yet — its n8n workflow hasn't run, or it came
+                back empty. The master scheduler will pick it up on the next pass.
               </p>
               <button
                 onClick={() => applyScope({ type: "all" })}
@@ -670,15 +665,7 @@ export default function App() {
           )}
         </section>
 
-        <SourcesLedger
-          outcomes={outcomes}
-          custom={customSources}
-          isAdmin={user?.role === "admin"}
-          onPick={(name) => showToast(`${name} is queued — register it from Browse to fast-track`)}
-          onAdd={() => setAddOpen(true)}
-          onRemove={removeSource}
-          onRegisterGate={registerGate}
-        />
+        <SourcesLedger outcomes={outcomes} custom={customSources} />
       </main>
 
       <Footer />
@@ -686,7 +673,7 @@ export default function App() {
       {selected && (
         <OfferModal
           offer={selected}
-          scrapedAt={scrapedAt}
+          scrapedAt={lastSync}
           live={live}
           cardFollowed={follows.includes(cardKey(selected.bank, selected.card))}
           vendorFollowed={follows.includes(vendorKey(selected.merchant))}
@@ -703,24 +690,13 @@ export default function App() {
         custom={customSources}
         active={scope}
         follows={follows}
-        isAdmin={user?.role === "admin"}
         onApply={applyScope}
         onClose={() => setDrawerOpen(false)}
         onLocked={(name) =>
-          showToast(`${name} is still queued — Al Rajhi is the only live source for now`)
+          showToast(`${name} is still queued — its workflow isn't deployed yet`)
         }
-        onAdd={() => setAddOpen(true)}
         onToggleCard={toggleCard}
         onToggleVendor={toggleVendor}
-        onRegisterGate={registerGate}
-      />
-
-      <AddSourceModal
-        open={addOpen}
-        sources={customSources}
-        onAdd={addSource}
-        onRemove={removeSource}
-        onClose={() => setAddOpen(false)}
       />
 
       <AuthModal

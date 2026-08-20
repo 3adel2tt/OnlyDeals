@@ -77,9 +77,9 @@ export interface LogLine {
   text: string;
 }
 
-export type SourceStatus = "live" | "snapshot" | "blocked";
+export type SourceStatus = "live" | "snapshot" | "error" | "queued";
 
-/** Per-source outcome of the latest scrape pass. */
+/** Per-source outcome reported by the latest n8n run. */
 export interface SourceOutcome {
   id: string;
   name: string;
@@ -89,15 +89,17 @@ export interface SourceOutcome {
   at: number;
 }
 
-export interface ScrapeResult {
+/** Wire format every n8n source workflow POSTs to the ingest endpoint. */
+export interface FeedPayload {
+  version: "offer.v1";
+  generatedAt: string;
+  generator: string;
+  sources: SourceOutcome[];
   offers: Offer[];
-  outcomes: SourceOutcome[];
-  live: boolean;
-  note: string;
-  scrapedAt: number;
 }
 
-export type ScrapeStatus = "idle" | "running" | "done";
+export type FeedProvenance = "remote" | "local" | "bundled";
+export type FeedStatus = "idle" | "syncing" | "done";
 
 export type BrowseScope =
   | { type: "all" }
