@@ -1,15 +1,16 @@
 import type { ScrapeStatus } from "../types";
 import { timeAgo } from "../lib/format";
-import { RadarMark, RefreshIcon } from "./icons";
+import { MenuIcon, RadarMark, RefreshIcon } from "./icons";
 
 interface Props {
   status: ScrapeStatus;
   live: boolean;
   scrapedAt: number | null;
   onRescrape: () => void;
+  onBrowse: () => void;
 }
 
-export default function TopBar({ status, live, scrapedAt, onRescrape }: Props) {
+export default function TopBar({ status, live, scrapedAt, onRescrape, onBrowse }: Props) {
   const running = status === "running";
 
   const dotClass = running
@@ -28,7 +29,15 @@ export default function TopBar({ status, live, scrapedAt, onRescrape }: Props) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-paper/85 backdrop-blur-md">
-      <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3 sm:px-6">
+      <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:gap-4 sm:px-6">
+        <button
+          onClick={onBrowse}
+          className="flex items-center gap-2 rounded-full border border-line bg-card px-3.5 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-ink-soft transition-all hover:border-pine hover:text-pine active:scale-[0.96]"
+          aria-label="Open browse menu"
+        >
+          <MenuIcon className="h-4 w-4" />
+          <span className="hidden sm:inline">Browse</span>
+        </button>
         <a href="#top" className="flex items-center gap-2.5 text-ink">
           <RadarMark active={running} className="h-8 w-8 text-pine" />
           <span className="leading-none">

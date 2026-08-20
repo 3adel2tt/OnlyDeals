@@ -74,7 +74,7 @@ export default function OfferModal({ offer, scrapedAt, live, onClose, onToast }:
             )}
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-term/85 via-term/35 to-transparent p-4 pt-12">
               <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-lime">
-                {CATEGORY_LABEL[offer.category]} · source 01 · al rajhi bank
+                {CATEGORY_LABEL[offer.category]} · {offer.bank} · {offer.card}
               </p>
               <h2 className="mt-1 font-display text-3xl font-extrabold tracking-tight text-paper">
                 {offer.discountLabel}

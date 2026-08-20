@@ -75,8 +75,10 @@ export default function OfferTile({ offer, index, onOpen }: Props) {
         {/* body */}
         <div className="p-4 pb-4 pt-5">
           <div className="flex items-center justify-between font-mono text-[9.5px] uppercase tracking-[0.16em]">
-            <span className="text-pine">{CATEGORY_LABEL[offer.category]}</span>
-            <span className="text-ink-faint">{offer.cards.length} card tier{offer.cards.length > 1 ? "s" : ""}</span>
+            <span className="shrink-0 text-pine">{CATEGORY_LABEL[offer.category]}</span>
+            <span className="ml-2 truncate text-ink-faint" title={offer.card}>
+              on {offer.card}
+            </span>
           </div>
 
           <h3 className="mt-1.5 font-display text-[19px] font-bold leading-snug tracking-tight text-ink">

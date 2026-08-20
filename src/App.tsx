@@ -1,16 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Category, LogLine, Offer, ScrapeStatus } from "./types";
+import type { BrowseScope, Category, LogLine, Offer, ScrapeStatus } from "./types";
 import { CATEGORY_LABEL } from "./types";
 import { runScrape } from "./scraper/engine";
 import { daysLeft, formatClock } from "./lib/format";
 import TopBar from "./components/TopBar";
 import Ticker from "./components/Ticker";
 import Terminal from "./components/Terminal";
+import BrowseDrawer from "./components/BrowseDrawer";
 import OfferTile from "./components/OfferTile";
 import OfferModal from "./components/OfferModal";
 import SourcesLedger from "./components/SourcesLedger";
 import Footer from "./components/Footer";
-import { CheckIcon, SearchIcon } from "./components/icons";
+import {
+  BankIcon,
+  CheckIcon,
+  CloseIcon,
+  SearchIcon,
+  StoreIcon,
+} from "./components/icons";
 
 type SortKey = "expiring" | "value" | "recent";
 
@@ -40,6 +47,8 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<Category | "all">("all");
   const [sort, setSort] = useState<SortKey>("expiring");
+  const [scope, setScope] = useState<BrowseScope>({ type: "all" });
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [, setTick] = useState(0);
 
   const logId = useRef(0);
@@ -99,14 +108,36 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  const applyScope = useCallback(
+    (next: BrowseScope) => {
+      setScope(next);
+      setCategory("all");
+      setSearch("");
+      setDrawerOpen(false);
+      window.setTimeout(() => {
+        document.getElementById("board")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 60);
+    },
+    [],
+  );
+
+  // offers narrowed by the drawer's bank→card / vendor drill-down
+  const scoped = useMemo(() => {
+    if (scope.type === "bank") return offers.filter((o) => o.bank === scope.bank);
+    if (scope.type === "bank-card")
+      return offers.filter((o) => o.bank === scope.bank && o.card === scope.card);
+    if (scope.type === "vendor") return offers.filter((o) => o.merchant === scope.vendor);
+    return offers;
+  }, [offers, scope]);
+
   const categories = useMemo(
-    () => Array.from(new Set(offers.map((o) => o.category))).sort(),
-    [offers],
+    () => Array.from(new Set(scoped.map((o) => o.category))).sort(),
+    [scoped],
   );
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const filtered = offers.filter((o) => {
+    const filtered = scoped.filter((o) => {
       if (category !== "all" && o.category !== category) return false;
       if (!q) return true;
       return (
@@ -120,21 +151,38 @@ export default function App() {
     if (sort === "expiring") return [...filtered].sort((a, b) => byExpiry(a) - byExpiry(b));
     if (sort === "value") return [...filtered].sort((a, b) => b.value - a.value);
     return filtered;
-  }, [offers, search, category, sort]);
+  }, [scoped, search, category, sort]);
 
   const stats = useMemo(() => {
-    const best = offers.reduce((m, o) => (o.value > m.value ? o : m), offers[0]);
-    const expiring = offers.filter(
+    const best = scoped.length
+      ? scoped.reduce((m, o) => (o.value > m.value ? o : m), scoped[0])
+      : undefined;
+    const expiring = scoped.filter(
       (o) => o.expiresAt && daysLeft(o.expiresAt) <= 7 && daysLeft(o.expiresAt) > 0,
     ).length;
-    return { count: offers.length, best, expiring };
-  }, [offers]);
+    return { count: scoped.length, best, expiring };
+  }, [scoped]);
 
-  const filtering = search.trim() !== "" || category !== "all";
+  const scopeLabel =
+    scope.type === "bank"
+      ? scope.bank
+      : scope.type === "bank-card"
+        ? `${scope.bank} › ${scope.card}`
+        : scope.type === "vendor"
+          ? scope.vendor
+          : "";
+
+  const filtering = search.trim() !== "" || category !== "all" || scope.type !== "all";
 
   return (
     <div id="top" className="min-h-screen">
-      <TopBar status={status} live={live} scrapedAt={scrapedAt} onRescrape={runPass} />
+      <TopBar
+        status={status}
+        live={live}
+        scrapedAt={scrapedAt}
+        onRescrape={runPass}
+        onBrowse={() => setDrawerOpen(true)}
+      />
       <Ticker offers={offers} />
 
       <main className="mx-auto max-w-7xl px-4 sm:px-6">
@@ -187,7 +235,7 @@ export default function App() {
             {
               label: "offers loaded",
               value: status === "done" ? String(stats.count) : "··",
-              sub: "al rajhi · card offers",
+              sub: scope.type === "all" ? "al rajhi · card offers" : scopeLabel.toLowerCase(),
               hot: false,
             },
             {
@@ -218,7 +266,33 @@ export default function App() {
         </section>
 
         {/* control deck */}
-        <section className="mt-8">
+        <section id="board" className="mt-8 scroll-mt-24">
+          {scope.type !== "all" && (
+            <div className="fade-in mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-pine/30 bg-tint/70 px-4 py-2.5">
+              {scope.type === "vendor" ? (
+                <StoreIcon className="h-4 w-4 text-pine" />
+              ) : (
+                <BankIcon className="h-4 w-4 text-pine" />
+              )}
+              <span className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-pine/70">
+                browsing
+              </span>
+              <span className="font-display text-[14.5px] font-bold tracking-tight text-ink">
+                {scopeLabel}
+              </span>
+              <span className="num-tabular rounded-full bg-pine px-2 py-0.5 font-mono text-[10px] font-semibold text-paper">
+                {scoped.length} offer{scoped.length === 1 ? "" : "s"}
+              </span>
+              <button
+                onClick={() => applyScope({ type: "all" })}
+                className="ml-auto flex items-center gap-1.5 rounded-full border border-pine/40 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-pine transition-all hover:bg-pine hover:text-paper active:scale-95"
+              >
+                <CloseIcon className="h-3 w-3" />
+                show all offers
+              </button>
+            </div>
+          )}
+
           <div className="flex flex-col gap-3 md:flex-row md:items-center">
             <div className="relative flex-1">
               <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
@@ -258,7 +332,7 @@ export default function App() {
                     : "border border-line bg-card text-ink-soft hover:border-pine/50 hover:text-pine"
                 }`}
               >
-                {c === "all" ? `all · ${offers.length || "…"}` : CATEGORY_LABEL[c]}
+                {c === "all" ? `all · ${scoped.length || "…"}` : CATEGORY_LABEL[c]}
               </button>
             ))}
           </div>
@@ -266,7 +340,9 @@ export default function App() {
           <div className="mt-5 flex items-center justify-between">
             <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-ink-faint">
               {status === "done"
-                ? `showing ${visible.length} of ${offers.length}`
+                ? scope.type !== "all"
+                  ? `showing ${visible.length} of ${scoped.length} · in scope`
+                  : `showing ${visible.length} of ${offers.length}`
                 : "receiving transmission…"}
             </p>
             {filtering && (
@@ -295,18 +371,34 @@ export default function App() {
             <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-line bg-card/60 px-6 py-16 text-center">
               <RadarEmpty />
               <p className="font-display text-xl font-bold text-ink">Nothing on the radar</p>
-              <p className="max-w-xs text-[13px] text-ink-soft">
-                No offers match “{search}” in this category. Widen the sweep.
+              <p className="max-w-sm text-[13px] leading-relaxed text-ink-soft">
+                {scope.type !== "all"
+                  ? `No ${scopeLabel} offers match${search ? ` “${search}”` : ""} in this category. Widen the sweep or step out of scope.`
+                  : `No offers match${search ? ` “${search}”` : ""} in this category. Widen the sweep.`}
               </p>
-              <button
-                onClick={() => {
-                  setSearch("");
-                  setCategory("all");
-                }}
-                className="mt-1 rounded-full bg-ink px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-paper transition-colors hover:bg-pine"
-              >
-                Reset sweep
-              </button>
+              <div className="mt-1 flex flex-wrap justify-center gap-2">
+                {scope.type !== "all" && (
+                  <button
+                    onClick={() => applyScope({ type: "all" })}
+                    className="rounded-full bg-ink px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-paper transition-colors hover:bg-pine"
+                  >
+                    Clear scope
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setSearch("");
+                    setCategory("all");
+                  }}
+                  className={`rounded-full px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] transition-colors ${
+                    scope.type !== "all"
+                      ? "border border-line text-ink-soft hover:border-pine hover:text-pine"
+                      : "bg-ink text-paper hover:bg-pine"
+                  }`}
+                >
+                  Reset sweep
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -331,6 +423,17 @@ export default function App() {
           onToast={showToast}
         />
       )}
+
+      <BrowseDrawer
+        open={drawerOpen}
+        offers={offers}
+        active={scope}
+        onApply={applyScope}
+        onClose={() => setDrawerOpen(false)}
+        onLocked={(name) =>
+          showToast(`${name} is still queued — Al Rajhi is the only live source for now`)
+        }
+      />
 
       {toast && (
         <div className="toast-up fixed bottom-6 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-full border border-term-line bg-term px-4 py-2.5 font-mono text-[11.5px] tracking-[0.06em] text-paper shadow-[0_18px_40px_-12px_rgba(12,23,18,0.6)]">

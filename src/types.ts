@@ -20,6 +20,10 @@ export interface Offer {
   value: number;
   kind: "percent" | "cashback" | "bogo" | "installments";
   category: Category;
+  /** Issuing bank this offer was scraped from */
+  bank: string;
+  /** Card tier the offer is attached to */
+  card: string;
   image: string;
   cards: string[];
   code?: string;
@@ -55,6 +59,12 @@ export interface ScrapeResult {
 }
 
 export type ScrapeStatus = "idle" | "running" | "done";
+
+export type BrowseScope =
+  | { type: "all" }
+  | { type: "bank"; bank: string }
+  | { type: "bank-card"; bank: string; card: string }
+  | { type: "vendor"; vendor: string };
 
 export const CATEGORY_LABEL: Record<Category, string> = {
   dining: "Dining",

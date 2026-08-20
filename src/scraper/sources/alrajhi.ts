@@ -106,6 +106,8 @@ function normalise(title: string, link: string, idx: number): Offer {
     value: pct ? Number(pct) : 0,
     kind: "percent",
     category,
+    bank: "Al Rajhi Bank",
+    card: "All credit tiers",
     image: "",
     cards: ["Al Rajhi credit cards"],
     link,
