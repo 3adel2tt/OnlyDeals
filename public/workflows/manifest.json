@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "workflows": [
+    {
+      "id": "alrajhi",
+      "name": "Source · Al Rajhi Bank",
+      "type": "source",
+      "file": "onlydeals-alrajhi.workflow.json",
+      "webhook": "onlydeals-alrajhi",
+      "description": "Webhook → fetch card-offers page → regex extraction → offer.v1 payload → POST to ingest → audit row to Google Sheets."
+    },
+    {
+      "id": "jarir",
+      "name": "Source · Jarir",
+      "type": "source",
+      "file": "onlydeals-jarir.workflow.json",
+      "webhook": "onlydeals-jarir",
+      "description": "Jarir offers page, percent + 0%-installments patterns, same offer.v1 payload + Sheets audit row."
+    },
+    {
+      "id": "master-scheduler",
+      "name": "Master scheduler",
+      "type": "scheduler",
+      "file": "onlydeals-master-scheduler.workflow.json",
+      "webhook": null,
+      "description": "Cron every 6h. Fans out a webhook call per registered source, logs each run to Sheets, posts a run report."
+    }
+  ]
+}
