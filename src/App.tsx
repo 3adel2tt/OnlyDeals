@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { BrowseScope, Category, CustomSource, LogLine, Offer, ScrapeStatus, User } from "./types";
+import type { BrowseScope, Category, CustomSource, LogLine, Offer, ScrapeStatus, SourceOutcome, User } from "./types";
 import { CATEGORY_LABEL } from "./types";
 import { runScrape } from "./scraper/engine";
 import { daysLeft, formatClock } from "./lib/format";
@@ -78,6 +78,8 @@ export default function App() {
   const [view, setView] = useState<"all" | "my">("all");
   const [authOpen, setAuthOpen] = useState(false);
   const [authIntent, setAuthIntent] = useState<"generic" | "admin" | "follow">("generic");
+  const [outcomes, setOutcomes] = useState<SourceOutcome[]>([]);
+  const [watch, setWatch] = useState(true);
   const [, setTick] = useState(0);
 
   const logId = useRef(0);
@@ -108,9 +110,15 @@ export default function App() {
     setLive(result.live);
     setNote(result.note);
     setScrapedAt(result.scrapedAt);
+    setOutcomes(result.outcomes);
     setStatus("done");
     running.current = false;
-    showToast(`Pass complete — ${result.offers.length} offers loaded`);
+    const liveN = result.outcomes.filter((o) => o.status === "live").length;
+    showToast(
+      liveN > 0
+        ? `Pass complete — ${result.offers.length} offers · ${liveN} source${liveN === 1 ? "" : "s"} live`
+        : `Pass complete — ${result.offers.length} offers from snapshot`,
+    );
   }, [showToast]);
 
   useEffect(() => {
@@ -128,6 +136,21 @@ export default function App() {
       setFollows(getFollows(u.id));
     }
   }, []);
+
+  // watch mode — the radar keeps sweeping on its own
+  useEffect(() => {
+    if (!watch) return;
+    const t = window.setInterval(() => {
+      if (!running.current) void runPass();
+    }, 120_000);
+    return () => window.clearInterval(t);
+  }, [watch, runPass]);
+
+  const toggleWatch = useCallback(() => {
+    const next = !watch;
+    setWatch(next);
+    showToast(next ? "Watch on — re-scanning every 2 min" : "Watch off — manual passes only");
+  }, [watch, showToast]);
 
   // keep relative timestamps fresh
   useEffect(() => {
@@ -345,8 +368,10 @@ export default function App() {
         status={status}
         live={live}
         scrapedAt={scrapedAt}
+        watch={watch}
         onRescrape={runPass}
         onBrowse={() => setDrawerOpen(true)}
+        onToggleWatch={toggleWatch}
         user={user}
         view={view}
         followCount={follows.length}
@@ -362,7 +387,7 @@ export default function App() {
           <div>
             <p className="flex flex-wrap items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.22em] text-brick">
               <span className="inline-block h-2 w-2 bg-brick" />
-              source 01 · al rajhi bank · card-offers
+              sources 01–03 · parallel crawl · alrajhi · snb · tamara
               {view === "my" && user && (
                 <span className="star-pop inline-flex items-center gap-1 rounded-full bg-amber px-2 py-0.5 text-[9.5px] font-bold text-ink">
                   <StarIcon filled className="h-3 w-3" />
@@ -646,6 +671,7 @@ export default function App() {
         </section>
 
         <SourcesLedger
+          outcomes={outcomes}
           custom={customSources}
           isAdmin={user?.role === "admin"}
           onPick={(name) => showToast(`${name} is queued — register it from Browse to fast-track`)}

@@ -77,8 +77,21 @@ export interface LogLine {
   text: string;
 }
 
+export type SourceStatus = "live" | "snapshot" | "blocked";
+
+/** Per-source outcome of the latest scrape pass. */
+export interface SourceOutcome {
+  id: string;
+  name: string;
+  status: SourceStatus;
+  count: number;
+  note: string;
+  at: number;
+}
+
 export interface ScrapeResult {
   offers: Offer[];
+  outcomes: SourceOutcome[];
   live: boolean;
   note: string;
   scrapedAt: number;

@@ -29,7 +29,7 @@ export default function Terminal({ logs, status }: Props) {
         <span className="h-2.5 w-2.5 rounded-full bg-amber" />
         <span className="h-2.5 w-2.5 rounded-full bg-flare" />
         <span className="ml-2 font-mono text-[11px] tracking-[0.1em] text-[#8f766f]">
-          scrape.log — sources/alrajhi.ts
+          scrape.log — engine.ts · 3 sources
         </span>
         <span
           className={`ml-auto rounded-full px-2.5 py-0.5 font-mono text-[9.5px] uppercase tracking-[0.18em] ${
@@ -49,7 +49,7 @@ export default function Terminal({ logs, status }: Props) {
         className="term-scroll h-36 overflow-y-auto px-4 py-3 font-mono text-[11.5px] leading-[1.75] sm:h-32"
       >
         {logs.length === 0 && (
-          <p className="text-[#6b544e]">$ offradar --source alrajhi --watch</p>
+          <p className="text-[#6b544e]">$ offradar --sources alrajhi,snb,tamara --watch</p>
         )}
         {logs.map((l) => (
           <p key={l.id} className={COLOR[l.kind]}>

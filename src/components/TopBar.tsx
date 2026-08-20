@@ -6,8 +6,10 @@ interface Props {
   status: ScrapeStatus;
   live: boolean;
   scrapedAt: number | null;
+  watch: boolean;
   onRescrape: () => void;
   onBrowse: () => void;
+  onToggleWatch: () => void;
   user: User | null;
   view: "all" | "my";
   followCount: number;
@@ -20,8 +22,10 @@ export default function TopBar({
   status,
   live,
   scrapedAt,
+  watch,
   onRescrape,
   onBrowse,
+  onToggleWatch,
   user,
   view,
   followCount,
@@ -137,6 +141,20 @@ export default function TopBar({
               <span className="hidden sm:inline">Sign in</span>
             </button>
           )}
+
+          <button
+            onClick={onToggleWatch}
+            aria-pressed={watch}
+            title={watch ? "Auto re-scrape every 2 min — click to stop watching" : "Watch is off — click to auto re-scrape every 2 min"}
+            className={`hidden items-center gap-1.5 rounded-full border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.14em] transition-all active:scale-95 md:flex ${
+              watch
+                ? "border-live/50 bg-live/10 text-[#0d7a47]"
+                : "border-line bg-card text-ink-faint hover:border-live/50 hover:text-[#0d7a47]"
+            }`}
+          >
+            <span className={`relative inline-block h-1.5 w-1.5 rounded-full ${watch ? "bg-live text-live ping-dot" : "bg-ink-faint text-ink-faint"}`} />
+            watch
+          </button>
 
           <button
             onClick={onRescrape}

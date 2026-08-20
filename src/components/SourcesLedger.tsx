@@ -1,27 +1,55 @@
-import type { CustomSource, SourceDef } from "../types";
+import type { CustomSource, SourceOutcome } from "../types";
 import { ArrowUpRight, LockIcon, PlusIcon, TrashIcon } from "./icons";
 
-const SOURCES: SourceDef[] = [
-  { id: "alrajhi", name: "Al Rajhi Bank", kind: "credit-card offers", status: "live", progress: 100, note: "10 offers indexed · snapshot fallback wired" },
-  { id: "snb", name: "SNB (AlAhli)", kind: "credit-card offers", status: "drafting", progress: 45, note: "selector ladder drafted, needs live test" },
-  { id: "riyad", name: "Riyad Bank", kind: "card offers", status: "queued", progress: 12, note: "target page identified" },
-  { id: "tamara", name: "Tamara", kind: "BNPL merchant deals", status: "queued", progress: 0, note: "public deals feed under review" },
-  { id: "amazon", name: "Amazon.sa", kind: "card-linked promos", status: "queued", progress: 0, note: "bank-code rotation tracking" },
-  { id: "noon", name: "Noon", kind: "bank code tracking", status: "queued", progress: 0, note: "depends on Amazon.sa module" },
+const MODULE_META: Record<string, { name: string; kind: string }> = {
+  alrajhi: { name: "Al Rajhi Bank", kind: "credit-card offers" },
+  snb: { name: "SNB (AlAhli)", kind: "credit-card offers" },
+  tamara: { name: "Tamara", kind: "BNPL merchant deals" },
+};
+const MODULE_ORDER = ["alrajhi", "snb", "tamara"];
+
+const QUEUED = [
+  { id: "riyad", name: "Riyad Bank", kind: "card offers" },
+  { id: "amazon", name: "Amazon.sa", kind: "card-linked promos" },
+  { id: "noon", name: "Noon", kind: "bank code tracking" },
 ];
 
-const CHIP: Record<SourceDef["status"], string> = {
+type RowStatus = SourceOutcome["status"] | "pending" | "queued" | "registered";
+
+const CHIP: Record<RowStatus, string> = {
   live: "bg-live/15 text-[#0d7a47] border-live/40",
-  drafting: "bg-amber-soft text-[#8a6410] border-amber/50",
+  snapshot: "bg-amber-soft text-[#8a6410] border-amber/50",
+  blocked: "bg-ember-soft text-ember border-ember/40",
+  pending: "bg-paper text-ink-faint border-line",
   queued: "bg-paper text-ink-faint border-line",
   registered: "bg-tint text-brick border-brick/40",
 };
 
-const BAR: Record<SourceDef["status"], string> = {
+const BAR: Record<RowStatus, string> = {
   live: "bg-live",
-  drafting: "bg-amber",
+  snapshot: "bg-amber",
+  blocked: "bg-ember/70",
+  pending: "bg-line",
   queued: "bg-line",
   registered: "bg-brick/40",
+};
+
+const PROG: Record<RowStatus, number> = {
+  live: 100,
+  snapshot: 85,
+  blocked: 25,
+  pending: 55,
+  queued: 12,
+  registered: 0,
+};
+
+const CHIP_LABEL: Record<RowStatus, string> = {
+  live: "● live",
+  snapshot: "snapshot",
+  blocked: "blocked",
+  pending: "armed",
+  queued: "queued",
+  registered: "registered",
 };
 
 function hostOf(url: string): string {
@@ -33,6 +61,7 @@ function hostOf(url: string): string {
 }
 
 interface Props {
+  outcomes: SourceOutcome[];
   custom: CustomSource[];
   isAdmin: boolean;
   onPick: (name: string) => void;
@@ -41,20 +70,62 @@ interface Props {
   onRegisterGate: () => void;
 }
 
-export default function SourcesLedger({ custom, isAdmin, onPick, onAdd, onRemove, onRegisterGate }: Props) {
-  const rows: Array<SourceDef & { url?: string; customId?: string }> = [
-    ...SOURCES,
-    ...custom.map((c) => ({
-      id: c.id,
-      name: c.name,
-      kind: c.kind === "bank" ? "registered bank" : "registered vendor",
-      status: "registered" as const,
-      progress: 0,
-      note: `target: ${hostOf(c.url)}${c.note ? ` · ${c.note}` : ""}`,
-      url: c.url,
-      customId: c.id,
-    })),
-  ];
+interface Row {
+  id: string;
+  name: string;
+  kind: string;
+  engine: string;
+  status: RowStatus;
+  progress: number;
+  note: string;
+  clickable: boolean;
+  url?: string;
+  customId?: string;
+}
+
+export default function SourcesLedger({ outcomes, custom, isAdmin, onPick, onAdd, onRemove, onRegisterGate }: Props) {
+  const byId = new Map(outcomes.map((o) => [o.id, o]));
+
+  const moduleRows: Row[] = MODULE_ORDER.map((id) => {
+    const o = byId.get(id);
+    const status: RowStatus = o?.status ?? "pending";
+    return {
+      id,
+      name: MODULE_META[id].name,
+      kind: MODULE_META[id].kind,
+      engine: `sources/${id}`,
+      status,
+      progress: PROG[status],
+      note: o?.note ?? "engine armed — awaiting first pass",
+      clickable: false,
+    };
+  });
+
+  const queuedRows: Row[] = QUEUED.map((q) => ({
+    id: q.id,
+    name: q.name,
+    kind: q.kind,
+    engine: "—",
+    status: "queued" as RowStatus,
+    progress: PROG.queued,
+    note: "queued — register it to fast-track",
+    clickable: true,
+  }));
+
+  const customRows = custom.map((c) => ({
+    id: c.id,
+    name: c.name,
+    kind: c.kind === "bank" ? "registered bank" : "registered vendor",
+    engine: "registry",
+    status: "registered" as RowStatus,
+    progress: PROG.registered,
+    note: `target: ${hostOf(c.url)}${c.note ? ` · ${c.note}` : ""}`,
+    url: c.url,
+    customId: c.id,
+    clickable: true,
+  }));
+
+  const rows = [...moduleRows, ...queuedRows, ...customRows];
 
   return (
     <section className="mt-16 sm:mt-20">
@@ -64,7 +135,7 @@ export default function SourcesLedger({ custom, isAdmin, onPick, onAdd, onRemove
             /// source pipeline
           </p>
           <h2 className="mt-1.5 font-display text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
-            One bank today, <span className="text-brick">the rest in line.</span>
+            Three engines running, <span className="text-brick">the rest in line.</span>
           </h2>
         </div>
         <div className="flex flex-col items-start gap-2 sm:items-end">
@@ -95,69 +166,85 @@ export default function SourcesLedger({ custom, isAdmin, onPick, onAdd, onRemove
       </div>
 
       <div className="mt-6 overflow-hidden rounded-xl border border-line bg-card">
-        {rows.map((s, i) => (
+        {rows.map((r, i) => (
           <div
-            key={s.id}
-            className={`group flex w-full flex-wrap items-center gap-x-4 gap-y-1 border-t border-line px-4 py-3.5 text-left transition-colors first:border-t-0 sm:flex-nowrap sm:px-5 ${
-              s.status === "live" ? "cursor-default bg-tint/45" : "hover:bg-tint/60"
+            key={r.id}
+            onClick={() => {
+              if ("customId" in r && r.customId) return; // ledger keeps its own links for custom rows
+              if (r.clickable) onPick(r.name);
+            }}
+            className={`flex w-full flex-wrap items-center gap-x-4 gap-y-1 border-t border-line px-4 py-3.5 text-left first:border-t-0 sm:flex-nowrap sm:px-5 ${
+              r.clickable ? "cursor-pointer transition-colors hover:bg-tint/60" : ""
             }`}
           >
-            <button
-              onClick={() => s.status !== "live" && onPick(s.name)}
-              disabled={s.status === "live"}
-              className={`flex min-w-0 flex-1 items-center gap-x-4 gap-y-1 text-left ${s.status === "live" ? "cursor-default" : "cursor-pointer"}`}
-            >
-              <span className="w-8 font-mono text-[11px] text-ink-faint">
-                {String(i + 1).padStart(2, "0")}
+            <span className="w-8 font-mono text-[11px] text-ink-faint">
+              {String(i + 1).padStart(2, "0")}
+            </span>
+            <span className="flex min-w-[150px] items-center gap-2 font-display text-[16px] font-bold tracking-tight text-ink">
+              {r.status === "live" && (
+                <span className="relative inline-block h-2 w-2 rounded-full bg-live text-live ping-dot" />
+              )}
+              {r.status === "snapshot" && (
+                <span className="inline-block h-2 w-2 rounded-full bg-amber" />
+              )}
+              {r.status === "blocked" && (
+                <span className="inline-block h-2 w-2 rounded-full bg-ember" />
+              )}
+              {r.name}
+            </span>
+            <span className="hidden font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-faint md:block">
+              {r.kind}
+            </span>
+            <span className="hidden w-24 font-mono text-[10.5px] text-brick/80 lg:block">
+              {r.engine}
+            </span>
+            <span className="hidden flex-1 truncate text-[12px] text-ink-soft lg:block">
+              {r.note}
+            </span>
+            <span className="ml-auto flex items-center gap-3">
+              <span className="hidden h-1.5 w-20 overflow-hidden rounded-full bg-line sm:block">
+                <span
+                  className={`block h-full rounded-full ${BAR[r.status]} transition-all duration-700`}
+                  style={{ width: `${r.progress}%` }}
+                />
               </span>
-              <span className="flex min-w-[150px] items-center gap-2 font-display text-[16px] font-bold tracking-tight text-ink">
-                {s.status === "live" && (
-                  <span className="relative inline-block h-2 w-2 rounded-full bg-live text-live ping-dot" />
-                )}
-                {s.name}
-              </span>
-              <span className="hidden font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-faint md:block">
-                {s.kind}
-              </span>
-              <span className="hidden flex-1 truncate text-[12px] text-ink-soft lg:block">
-                {s.note}
-              </span>
-              <span className="ml-auto flex items-center gap-3">
-                <span className="hidden h-1.5 w-20 overflow-hidden rounded-full bg-line sm:block">
-                  <span
-                    className={`block h-full rounded-full ${BAR[s.status]} transition-all duration-700`}
-                    style={{ width: `${s.progress}%` }}
-                  />
+              {"customId" in r && r.customId ? (
+                <span className="flex items-center gap-1.5">
+                  {r.url && (
+                    <a
+                      href={r.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-full border border-line p-1.5 text-ink-faint transition-colors hover:border-brick/50 hover:text-brick"
+                      aria-label={`Open ${r.name} target page`}
+                    >
+                      <ArrowUpRight className="h-3.5 w-3.5" />
+                    </a>
+                  )}
+                  <button
+                    onClick={() => r.customId && onRemove(r.customId)}
+                    className="rounded-full border border-line p-1.5 text-ink-faint transition-colors hover:border-ember hover:text-ember"
+                    aria-label={`Remove ${r.name}`}
+                  >
+                    <TrashIcon className="h-3.5 w-3.5" />
+                  </button>
+                  <span className={`rounded-full border px-2.5 py-1 font-mono text-[9.5px] uppercase tracking-[0.14em] ${CHIP[r.status]}`}>
+                    {CHIP_LABEL[r.status]}
+                  </span>
                 </span>
-                <span className={`rounded-full border px-2.5 py-1 font-mono text-[9.5px] uppercase tracking-[0.14em] ${CHIP[s.status]}`}>
-                  {s.status === "live" ? "● live" : s.status}
+              ) : (
+                <span className={`rounded-full border px-2.5 py-1 font-mono text-[9.5px] uppercase tracking-[0.14em] ${CHIP[r.status]}`}>
+                  {CHIP_LABEL[r.status]}
                 </span>
-              </span>
-            </button>
-
-            {s.customId && s.url && (
-              <span className="flex items-center gap-1">
-                <a
-                  href={s.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="rounded-full border border-line p-1.5 text-ink-faint transition-colors hover:border-brick/50 hover:text-brick"
-                  aria-label={`Open ${s.name} offers page`}
-                >
-                  <ArrowUpRight className="h-3.5 w-3.5" />
-                </a>
-                <button
-                  onClick={() => onRemove(s.customId!)}
-                  className="rounded-full border border-line p-1.5 text-ink-faint transition-colors hover:border-ember hover:text-ember"
-                  aria-label={`Remove ${s.name} from registry`}
-                >
-                  <TrashIcon className="h-3.5 w-3.5" />
-                </button>
-              </span>
-            )}
+              )}
+            </span>
           </div>
         ))}
       </div>
+
+      <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+        blocked = every relay refused · snapshot = cached copy served · live = parsed from the page this pass
+      </p>
     </section>
   );
 }
