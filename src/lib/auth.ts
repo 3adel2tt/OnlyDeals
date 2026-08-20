@@ -90,7 +90,14 @@ export function getSession(): User | null {
 
 export type AuthResult = { ok: true; user: User } | { ok: false; error: string };
 
-export function login(username: string, password: string): AuthResult {
+export interface LoginOpts {
+  /** public site — rejects admin accounts (they belong in the control room) */
+  publicOnly?: boolean;
+  /** control room — rejects non-admin accounts */
+  requireAdmin?: boolean;
+}
+
+export function login(username: string, password: string, opts: LoginOpts = {}): AuthResult {
   ensureSeeded();
   const name = username.trim().toLowerCase();
   if (!name || !password) return { ok: false, error: "Enter both username and password." };
@@ -98,6 +105,10 @@ export function login(username: string, password: string): AuthResult {
   if (!u) return { ok: false, error: "No account found for that username." };
   if (u.hash !== hashPassword(u.username, password))
     return { ok: false, error: "Wrong password — try again." };
+  if (opts.publicOnly && u.role === "admin")
+    return { ok: false, error: "That account doesn't sign in here." };
+  if (opts.requireAdmin && u.role !== "admin")
+    return { ok: false, error: "Members can't enter the control room — admin only." };
   try {
     localStorage.setItem(SESSION_KEY, u.id);
   } catch {

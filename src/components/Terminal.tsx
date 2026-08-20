@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { LogLine, ScrapeStatus } from "../types";
+import type { FeedStatus, LogLine } from "../types";
 
 const COLOR: Record<LogLine["kind"], string> = {
   sys: "text-flare",
@@ -11,10 +11,11 @@ const COLOR: Record<LogLine["kind"], string> = {
 
 interface Props {
   logs: LogLine[];
-  status: ScrapeStatus;
+  status: FeedStatus;
 }
 
 export default function Terminal({ logs, status }: Props) {
+  const running = status === "syncing";
   const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -29,18 +30,18 @@ export default function Terminal({ logs, status }: Props) {
         <span className="h-2.5 w-2.5 rounded-full bg-amber" />
         <span className="h-2.5 w-2.5 rounded-full bg-flare" />
         <span className="ml-2 font-mono text-[11px] tracking-[0.1em] text-[#8f766f]">
-          scrape.log — sources/alrajhi.ts
+          feed.log — n8n ingest reader
         </span>
         <span
           className={`ml-auto rounded-full px-2.5 py-0.5 font-mono text-[9.5px] uppercase tracking-[0.18em] ${
-            status === "running"
+            running
               ? "bg-amber/15 text-amber"
               : status === "done"
                 ? "bg-live/15 text-live"
                 : "bg-paper/5 text-[#8f766f]"
           }`}
         >
-          {status === "running" ? "running" : status === "done" ? "complete" : "idle"}
+          {running ? "syncing" : status === "done" ? "synced" : "idle"}
         </span>
       </div>
 
@@ -49,7 +50,7 @@ export default function Terminal({ logs, status }: Props) {
         className="term-scroll h-36 overflow-y-auto px-4 py-3 font-mono text-[11.5px] leading-[1.75] sm:h-32"
       >
         {logs.length === 0 && (
-          <p className="text-[#6b544e]">$ offradar --source alrajhi --watch</p>
+          <p className="text-[#6b544e]">$ offradar --sources alrajhi,snb,tamara --watch</p>
         )}
         {logs.map((l) => (
           <p key={l.id} className={COLOR[l.kind]}>
@@ -58,7 +59,7 @@ export default function Terminal({ logs, status }: Props) {
             {l.text}
           </p>
         ))}
-        {status === "running" && (
+        {running && (
           <span className="caret inline-block h-[13px] w-[7px] translate-y-[2px] bg-flare" />
         )}
       </div>

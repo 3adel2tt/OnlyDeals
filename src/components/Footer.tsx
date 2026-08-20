@@ -18,19 +18,19 @@ export default function Footer() {
         <dl className="grid grid-cols-2 gap-x-10 gap-y-3 font-mono text-[11px] tracking-[0.08em] text-[#8f766f] sm:grid-cols-3">
           <div>
             <dt className="uppercase text-[#6b544e]">engine</dt>
-            <dd className="mt-0.5 text-paper/90">fetch + DOMParser</dd>
+            <dd className="mt-0.5 text-paper/90">n8n workflows</dd>
           </div>
           <div>
-            <dt className="uppercase text-[#6b544e]">relay</dt>
-            <dd className="mt-0.5 text-paper/90">allorigins</dd>
+            <dt className="uppercase text-[#6b544e]">ingest</dt>
+            <dd className="mt-0.5 text-paper/90">offradar.json</dd>
           </div>
           <div>
             <dt className="uppercase text-[#6b544e]">fallback</dt>
-            <dd className="mt-0.5 text-paper/90">local snapshot</dd>
+            <dd className="mt-0.5 text-paper/90">bundled seed</dd>
           </div>
           <div>
             <dt className="uppercase text-[#6b544e]">sources</dt>
-            <dd className="mt-0.5 text-paper/90">1 live · registry open</dd>
+            <dd className="mt-0.5 text-paper/90">2 engines · plug-and-play</dd>
           </div>
           <div>
             <dt className="uppercase text-[#6b544e]">schema</dt>
@@ -38,7 +38,7 @@ export default function Footer() {
           </div>
           <div>
             <dt className="uppercase text-[#6b544e]">build</dt>
-            <dd className="mt-0.5 text-paper/90">v0.2.0</dd>
+            <dd className="mt-0.5 text-paper/90">v0.4.0</dd>
           </div>
         </dl>
       </div>

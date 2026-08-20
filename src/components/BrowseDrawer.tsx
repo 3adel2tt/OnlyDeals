@@ -9,7 +9,6 @@ import {
   ChevronRightIcon,
   CloseIcon,
   LockIcon,
-  PlusIcon,
   SearchIcon,
   StarIcon,
   StoreIcon,
@@ -48,14 +47,11 @@ interface Props {
   custom: CustomSource[];
   active: BrowseScope;
   follows: string[];
-  isAdmin: boolean;
   onApply: (scope: BrowseScope) => void;
   onClose: () => void;
   onLocked: (name: string) => void;
-  onAdd: () => void;
   onToggleCard: (bank: string, card: string) => void;
   onToggleVendor: (merchant: string) => void;
-  onRegisterGate: () => void;
 }
 
 export default function BrowseDrawer({
@@ -64,14 +60,11 @@ export default function BrowseDrawer({
   custom,
   active,
   follows,
-  isAdmin,
   onApply,
   onClose,
   onLocked,
-  onAdd,
   onToggleCard,
   onToggleVendor,
-  onRegisterGate,
 }: Props) {
   const [tab, setTab] = useState<"banks" | "vendors">("banks");
   const [drillBank, setDrillBank] = useState<string | null>(null);
@@ -518,26 +511,12 @@ export default function BrowseDrawer({
 
         {/* foot */}
         <div className="border-t border-term-line px-5 py-3">
-          {isAdmin ? (
-            <button
-              onClick={onAdd}
-              className="mb-2 flex w-full items-center justify-center gap-2 rounded-full bg-flare px-4 py-2.5 font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#2b0c08] transition-all hover:bg-paper active:scale-[0.97]"
-            >
-              <PlusIcon className="h-3.5 w-3.5" />
-              register a bank / vendor
-            </button>
-          ) : (
-            <button
-              onClick={onRegisterGate}
-              className="mb-2 flex w-full items-center justify-center gap-2 rounded-full border border-dashed border-term-line px-4 py-2.5 font-mono text-[10.5px] uppercase tracking-[0.14em] text-[#8f766f] transition-all hover:border-amber/50 hover:text-amber active:scale-[0.97]"
-              title="The source registry is admin-only"
-            >
-              <LockIcon className="h-3.5 w-3.5" />
-              register — admin only
-            </button>
-          )}
-          <p className="text-center font-mono text-[9px] uppercase tracking-[0.16em] text-[#6b544e]">
-            1 source live · {custom.length} registered · schema offer.v1
+          <p className="flex items-center justify-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-[#8f766f]">
+            <LockIcon className="h-3 w-3 shrink-0" />
+            source registry lives in the control room
+          </p>
+          <p className="mt-1 text-center font-mono text-[9px] uppercase tracking-[0.16em] text-[#6b544e]">
+            {custom.length} registered · schema offer.v1 · fed by n8n
           </p>
         </div>
       </aside>

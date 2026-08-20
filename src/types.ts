@@ -77,14 +77,29 @@ export interface LogLine {
   text: string;
 }
 
-export interface ScrapeResult {
-  offers: Offer[];
-  live: boolean;
+export type SourceStatus = "live" | "snapshot" | "error" | "queued";
+
+/** Per-source outcome reported by the latest n8n run. */
+export interface SourceOutcome {
+  id: string;
+  name: string;
+  status: SourceStatus;
+  count: number;
   note: string;
-  scrapedAt: number;
+  at: number;
 }
 
-export type ScrapeStatus = "idle" | "running" | "done";
+/** Wire format every n8n source workflow POSTs to the ingest endpoint. */
+export interface FeedPayload {
+  version: "offer.v1";
+  generatedAt: string;
+  generator: string;
+  sources: SourceOutcome[];
+  offers: Offer[];
+}
+
+export type FeedProvenance = "remote" | "local" | "bundled";
+export type FeedStatus = "idle" | "syncing" | "done";
 
 export type BrowseScope =
   | { type: "all" }

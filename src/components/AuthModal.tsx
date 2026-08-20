@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import type { User } from "../types";
-import { DEMO_ADMIN, login, signup } from "../lib/auth";
+import { login, signup } from "../lib/auth";
 import { CloseIcon, LockIcon, RadarMark, UserIcon } from "./icons";
 
 interface Props {
   open: boolean;
-  intent: "generic" | "admin" | "follow";
+  intent: "generic" | "follow";
   onClose: () => void;
   onAuthed: (user: User) => void;
 }
@@ -14,10 +14,6 @@ const INTENT_COPY: Record<Props["intent"], { title: string; sub: string }> = {
   generic: {
     title: "Get on the radar",
     sub: "Sign in to follow card tiers and merchants — your own slice of the board, saved on this device.",
-  },
-  admin: {
-    title: "Admin sign-in required",
-    sub: "The source registry is restricted to the web admin. Sign in with an admin account to register banks or vendors.",
   },
   follow: {
     title: "Sign in to follow",
@@ -59,7 +55,7 @@ export default function AuthModal({ open, intent, onClose, onAuthed }: Props) {
     window.setTimeout(() => {
       const res =
         mode === "login"
-          ? login(username, password)
+          ? login(username, password, { publicOnly: true })
           : signup(username, password, displayName);
       setBusy(false);
       if (!res.ok) {
@@ -72,13 +68,6 @@ export default function AuthModal({ open, intent, onClose, onAuthed }: Props) {
       setDisplayName("");
       onAuthed(res.user);
     }, 320);
-  };
-
-  const fillAdmin = () => {
-    setMode("login");
-    setUsername(DEMO_ADMIN.username);
-    setPassword(DEMO_ADMIN.password);
-    setError(null);
   };
 
   const inputCls =
@@ -196,25 +185,9 @@ export default function AuthModal({ open, intent, onClose, onAuthed }: Props) {
           </button>
         </div>
 
-        <div className="mt-4 rounded-lg border border-dashed border-line bg-paper/70 px-3.5 py-3">
-          <p className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-ink-faint">
-            Demo admin
-          </p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            <code className="rounded border border-brick/40 bg-tint px-2 py-0.5 font-mono text-[11.5px] font-semibold text-brick">
-              {DEMO_ADMIN.username} / {DEMO_ADMIN.password}
-            </code>
-            <button
-              onClick={fillAdmin}
-              className="rounded-full bg-ink px-3 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-paper transition-colors hover:bg-brick"
-            >
-              Fill
-            </button>
-          </div>
-          <p className="mt-1.5 text-[11px] leading-relaxed text-ink-faint">
-            Accounts live only in this browser — nothing is sent anywhere.
-          </p>
-        </div>
+        <p className="mt-4 text-center text-[11px] leading-relaxed text-ink-faint">
+          Accounts live only in this browser — nothing is sent anywhere.
+        </p>
       </div>
     </div>
   );
