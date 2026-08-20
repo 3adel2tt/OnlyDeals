@@ -50,7 +50,7 @@ export default function Terminal({ logs, status }: Props) {
         className="term-scroll h-36 overflow-y-auto px-4 py-3 font-mono text-[11.5px] leading-[1.75] sm:h-32"
       >
         {logs.length === 0 && (
-          <p className="text-[#6b544e]">$ offradar --sources alrajhi,snb,tamara --watch</p>
+          <p className="text-[#6b544e]">$ onlydeals sync --feed onlydeals.json</p>
         )}
         {logs.map((l) => (
           <p key={l.id} className={COLOR[l.kind]}>

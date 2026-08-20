@@ -10,7 +10,7 @@ import type { Offer } from "../types";
 export const cardKey = (bank: string, card: string) => `card::${bank}::${card}`;
 export const vendorKey = (merchant: string) => `vendor::${merchant}`;
 
-const storageKey = (userId: string) => `offradar:follows:${userId}`;
+const storageKey = (userId: string) => `onlydeals:follows:${userId}`;
 
 export function getFollows(userId: string): string[] {
   try {

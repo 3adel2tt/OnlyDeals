@@ -6,8 +6,9 @@ import type { StoredUser, User } from "../types";
  * (swap for a real backend before exposing anything public).
  */
 
-const USERS_KEY = "offradar:users:v1";
-const SESSION_KEY = "offradar:session:v1";
+export const USERS_KEY = "onlydeals:users:v1";
+export const SESSION_KEY = "onlydeals:session:v1";
+/* salt is frozen at first release — changing it would invalidate existing hashes */
 const SALT = "offradar::v0.3::";
 
 export const DEMO_ADMIN = { username: "admin", password: "admin123" };
@@ -68,7 +69,7 @@ export function ensureSeeded(): void {
   users.push({
     id: "u-admin",
     username: DEMO_ADMIN.username,
-    displayName: "Radar Admin",
+    displayName: "Deals Admin",
     role: "admin",
     createdAt: Date.now(),
     hash: hashPassword(DEMO_ADMIN.username, DEMO_ADMIN.password),

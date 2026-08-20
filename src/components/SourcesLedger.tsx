@@ -17,8 +17,8 @@ interface BaseSource {
 }
 
 const PIPELINE: BaseSource[] = [
-  { id: "alrajhi", name: "Al Rajhi Bank", kind: "credit-card offers", engine: "offradar-alrajhi", base: "queued", progress: 100, note: "webhook ready · runs from control room or master scheduler" },
-  { id: "jarir", name: "Jarir", kind: "merchant offers", engine: "offradar-jarir", base: "queued", progress: 100, note: "webhook ready · runs from control room or master scheduler" },
+  { id: "alrajhi", name: "Al Rajhi Bank", kind: "credit-card offers", engine: "onlydeals-alrajhi", base: "queued", progress: 100, note: "webhook ready · runs from control room or master scheduler" },
+  { id: "jarir", name: "Jarir", kind: "merchant offers", engine: "onlydeals-jarir", base: "queued", progress: 100, note: "webhook ready · runs from control room or master scheduler" },
   { id: "snb", name: "SNB (AlAhli)", kind: "credit-card offers", engine: "—", base: "queued", progress: 35, note: "workflow drafting" },
   { id: "tamara", name: "Tamara", kind: "BNPL merchant deals", engine: "—", base: "queued", progress: 10, note: "deals feed under review" },
   { id: "noon", name: "Noon", kind: "bank code tracking", engine: "—", base: "queued", progress: 5, note: "queued behind jarir" },

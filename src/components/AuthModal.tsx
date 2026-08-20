@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { User } from "../types";
 import { login, signup } from "../lib/auth";
-import { CloseIcon, LockIcon, RadarMark, UserIcon } from "./icons";
+import { BrandMark, CloseIcon, LockIcon, UserIcon } from "./icons";
 
 interface Props {
   open: boolean;
@@ -12,12 +12,12 @@ interface Props {
 
 const INTENT_COPY: Record<Props["intent"], { title: string; sub: string }> = {
   generic: {
-    title: "Get on the radar",
+    title: "onlydeals account",
     sub: "Sign in to follow card tiers and merchants — your own slice of the board, saved on this device.",
   },
   follow: {
     title: "Sign in to follow",
-    sub: "Following is per-account — create one (takes ten seconds) and your radar is saved on this device.",
+    sub: "Following is per-account — create one (takes ten seconds) and your deals list is saved on this device.",
   },
 };
 
@@ -95,7 +95,7 @@ export default function AuthModal({ open, intent, onClose, onAuthed }: Props) {
         </button>
 
         <div className="flex items-center gap-3">
-          <RadarMark className="h-9 w-9 text-brick" />
+          <BrandMark className="h-9 w-9" />
           <div>
             <h2 className="font-display text-[21px] font-extrabold tracking-tight text-ink">
               {copy.title}
