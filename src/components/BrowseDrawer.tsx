@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import type { BrowseScope, CustomSource, Offer } from "../types";
 import { CATEGORY_LABEL } from "../types";
+import { cardKey, vendorKey } from "../lib/follows";
 import {
   BackIcon,
   BankIcon,
   CardIcon,
   ChevronRightIcon,
   CloseIcon,
+  LockIcon,
   PlusIcon,
   SearchIcon,
+  StarIcon,
   StoreIcon,
 } from "./icons";
 
@@ -44,13 +47,32 @@ interface Props {
   offers: Offer[];
   custom: CustomSource[];
   active: BrowseScope;
+  follows: string[];
+  isAdmin: boolean;
   onApply: (scope: BrowseScope) => void;
   onClose: () => void;
   onLocked: (name: string) => void;
   onAdd: () => void;
+  onToggleCard: (bank: string, card: string) => void;
+  onToggleVendor: (merchant: string) => void;
+  onRegisterGate: () => void;
 }
 
-export default function BrowseDrawer({ open, offers, custom, active, onApply, onClose, onLocked, onAdd }: Props) {
+export default function BrowseDrawer({
+  open,
+  offers,
+  custom,
+  active,
+  follows,
+  isAdmin,
+  onApply,
+  onClose,
+  onLocked,
+  onAdd,
+  onToggleCard,
+  onToggleVendor,
+  onRegisterGate,
+}: Props) {
   const [tab, setTab] = useState<"banks" | "vendors">("banks");
   const [drillBank, setDrillBank] = useState<string | null>(null);
   const [vendorQuery, setVendorQuery] = useState("");
@@ -322,12 +344,21 @@ export default function BrowseDrawer({ open, offers, custom, active, onApply, on
                     active.type === "bank-card" &&
                     active.bank === drilled.bank &&
                     active.card === c.card;
+                  const followed = follows.includes(cardKey(drilled.bank, c.card));
                   return (
-                    <button
+                    <div
                       key={c.card}
+                      role="button"
+                      tabIndex={0}
                       onClick={() => onApply({ type: "bank-card", bank: drilled.bank, card: c.card })}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onApply({ type: "bank-card", bank: drilled.bank, card: c.card });
+                        }
+                      }}
                       style={{ animationDelay: `${i * 50}ms` }}
-                      className={`row-in group flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left transition-all hover:translate-x-1 ${
+                      className={`row-in group flex w-full cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 text-left transition-all hover:translate-x-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flare ${
                         isActive
                           ? "border-flare/50 bg-flare/10"
                           : "border-term-line bg-[#1f1412] hover:border-flare/40"
@@ -357,11 +388,26 @@ export default function BrowseDrawer({ open, offers, custom, active, onApply, on
                           )}
                         </span>
                       </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleCard(drilled.bank, c.card);
+                        }}
+                        title={followed ? "Unfollow this card" : "Follow this card tier"}
+                        aria-label={followed ? "Unfollow card" : "Follow card"}
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all active:scale-90 ${
+                          followed
+                            ? "star-pop bg-amber text-ink shadow-[0_3px_10px_-2px_rgba(232,185,62,0.8)]"
+                            : "border border-term-line text-[#8f766f] hover:border-amber/60 hover:text-amber"
+                        }`}
+                      >
+                        <StarIcon filled={followed} className="h-3.5 w-3.5" />
+                      </button>
                       <span className="font-mono text-[10px] font-semibold text-flare">
                         {c.count} offer{c.count > 1 ? "s" : ""}
                       </span>
                       <ChevronRightIcon className="h-3.5 w-3.5 text-[#6b544e] transition-transform group-hover:translate-x-0.5 group-hover:text-flare" />
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -391,12 +437,21 @@ export default function BrowseDrawer({ open, offers, custom, active, onApply, on
               <div className="space-y-1.5">
                 {filteredVendors.map((v, i) => {
                   const isActive = active.type === "vendor" && active.vendor === v.vendor;
+                  const followed = follows.includes(vendorKey(v.vendor));
                   return (
-                    <button
+                    <div
                       key={v.vendor}
+                      role="button"
+                      tabIndex={0}
                       onClick={() => onApply({ type: "vendor", vendor: v.vendor })}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onApply({ type: "vendor", vendor: v.vendor });
+                        }
+                      }}
                       style={{ animationDelay: `${i * 30}ms` }}
-                      className={`row-in group flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all hover:translate-x-1 ${
+                      className={`row-in group flex w-full cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all hover:translate-x-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flare ${
                         v.registered && !isActive
                           ? "border-dashed border-term-line bg-transparent hover:border-flare/40"
                           : isActive
@@ -432,8 +487,23 @@ export default function BrowseDrawer({ open, offers, custom, active, onApply, on
                           registered
                         </span>
                       )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleVendor(v.vendor);
+                        }}
+                        title={followed ? "Unfollow this merchant" : "Follow this merchant"}
+                        aria-label={followed ? "Unfollow merchant" : "Follow merchant"}
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all active:scale-90 ${
+                          followed
+                            ? "star-pop bg-amber text-ink shadow-[0_3px_10px_-2px_rgba(232,185,62,0.8)]"
+                            : "border border-term-line text-[#8f766f] hover:border-amber/60 hover:text-amber"
+                        }`}
+                      >
+                        <StarIcon filled={followed} className="h-3.5 w-3.5" />
+                      </button>
                       <ChevronRightIcon className="h-3.5 w-3.5 text-[#6b544e] transition-transform group-hover:translate-x-0.5 group-hover:text-flare" />
-                    </button>
+                    </div>
                   );
                 })}
                 {filteredVendors.length === 0 && (
@@ -448,13 +518,24 @@ export default function BrowseDrawer({ open, offers, custom, active, onApply, on
 
         {/* foot */}
         <div className="border-t border-term-line px-5 py-3">
-          <button
-            onClick={onAdd}
-            className="mb-2 flex w-full items-center justify-center gap-2 rounded-full bg-flare px-4 py-2.5 font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#2b0c08] transition-all hover:bg-paper active:scale-[0.97]"
-          >
-            <PlusIcon className="h-3.5 w-3.5" />
-            register a bank / vendor
-          </button>
+          {isAdmin ? (
+            <button
+              onClick={onAdd}
+              className="mb-2 flex w-full items-center justify-center gap-2 rounded-full bg-flare px-4 py-2.5 font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#2b0c08] transition-all hover:bg-paper active:scale-[0.97]"
+            >
+              <PlusIcon className="h-3.5 w-3.5" />
+              register a bank / vendor
+            </button>
+          ) : (
+            <button
+              onClick={onRegisterGate}
+              className="mb-2 flex w-full items-center justify-center gap-2 rounded-full border border-dashed border-term-line px-4 py-2.5 font-mono text-[10.5px] uppercase tracking-[0.14em] text-[#8f766f] transition-all hover:border-amber/50 hover:text-amber active:scale-[0.97]"
+              title="The source registry is admin-only"
+            >
+              <LockIcon className="h-3.5 w-3.5" />
+              register — admin only
+            </button>
+          )}
           <p className="text-center font-mono text-[9px] uppercase tracking-[0.16em] text-[#6b544e]">
             1 source live · {custom.length} registered · schema offer.v1
           </p>

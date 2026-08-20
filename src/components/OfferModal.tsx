@@ -8,12 +8,18 @@ import {
   CardIcon,
   CloseIcon,
   CopyIcon,
+  StarIcon,
+  StoreIcon,
 } from "./icons";
 
 interface Props {
   offer: Offer;
   scrapedAt: number | null;
   live: boolean;
+  cardFollowed: boolean;
+  vendorFollowed: boolean;
+  onToggleCard: (offer: Offer) => void;
+  onToggleVendor: (offer: Offer) => void;
   onClose: () => void;
   onToast: (msg: string) => void;
 }
@@ -25,7 +31,17 @@ const TONE_TEXT: Record<string, string> = {
   open: "text-ink-faint",
 };
 
-export default function OfferModal({ offer, scrapedAt, live, onClose, onToast }: Props) {
+export default function OfferModal({
+  offer,
+  scrapedAt,
+  live,
+  cardFollowed,
+  vendorFollowed,
+  onToggleCard,
+  onToggleVendor,
+  onClose,
+  onToast,
+}: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -134,6 +150,36 @@ export default function OfferModal({ offer, scrapedAt, live, onClose, onToast }:
                 </div>
               </div>
             </dl>
+
+            {/* follow actions */}
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button
+                onClick={() => onToggleCard(offer)}
+                className={`flex items-center justify-center gap-1.5 rounded-full border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] transition-all active:scale-95 ${
+                  cardFollowed
+                    ? "star-pop border-amber bg-amber text-ink"
+                    : "border-line bg-paper text-ink-soft hover:border-amber hover:text-ink"
+                }`}
+              >
+                <StarIcon filled={cardFollowed} className="h-3.5 w-3.5" />
+                {cardFollowed ? "Following card" : "Follow card"}
+              </button>
+              <button
+                onClick={() => onToggleVendor(offer)}
+                className={`flex items-center justify-center gap-1.5 rounded-full border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] transition-all active:scale-95 ${
+                  vendorFollowed
+                    ? "star-pop border-amber bg-amber text-ink"
+                    : "border-line bg-paper text-ink-soft hover:border-amber hover:text-ink"
+                }`}
+              >
+                {vendorFollowed ? (
+                  <StarIcon filled className="h-3.5 w-3.5" />
+                ) : (
+                  <StoreIcon className="h-3.5 w-3.5" />
+                )}
+                {vendorFollowed ? "Following vendor" : "Follow vendor"}
+              </button>
+            </div>
 
             <div className="mt-5 rounded-lg border border-line bg-paper/70 p-3.5">
               <p className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-ink-faint">Fine print</p>

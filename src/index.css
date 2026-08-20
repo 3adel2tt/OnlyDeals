@@ -124,6 +124,23 @@ body {
 }
 .row-in { animation: row-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
+/* ---------- star / follow ---------- */
+@keyframes star-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.45) rotate(-8deg); }
+  100% { transform: scale(1); }
+}
+.star-pop { animation: star-pop 0.38s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+@keyframes shake-x {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-5px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+.shake-x { animation: shake-x 0.4s ease; }
+
 /* ---------- misc ---------- */
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { animation: spin 0.8s linear infinite; }

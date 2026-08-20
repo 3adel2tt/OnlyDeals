@@ -2,12 +2,14 @@ import type { Offer } from "../types";
 import { CATEGORY_LABEL } from "../types";
 import { expiryMeta } from "../lib/format";
 import { useReveal } from "../hooks/useReveal";
-import { ArrowUpRight, CalendarIcon } from "./icons";
+import { ArrowUpRight, CalendarIcon, StarIcon } from "./icons";
 
 interface Props {
   offer: Offer;
   index: number;
   onOpen: (o: Offer) => void;
+  followed: boolean;
+  onToggleFollow: (o: Offer) => void;
 }
 
 const BADGE: Record<string, string> = {
@@ -24,7 +26,7 @@ const STAMP: Record<Offer["kind"], string> = {
   installments: "border-2 border-term bg-paper text-ink",
 };
 
-export default function OfferTile({ offer, index, onOpen }: Props) {
+export default function OfferTile({ offer, index, onOpen, followed, onToggleFollow }: Props) {
   const { ref, inView } = useReveal<HTMLDivElement>();
   const exp = expiryMeta(offer.expiresAt);
   const rotate = ["-rotate-2", "rotate-1", "-rotate-1", "rotate-2"][index % 4];
@@ -35,9 +37,17 @@ export default function OfferTile({ offer, index, onOpen }: Props) {
       className={`reveal ${inView ? "is-in" : ""}`}
       style={{ transitionDelay: `${(index % 4) * 70}ms` }}
     >
-      <button
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => onOpen(offer)}
-        className="group block w-full overflow-hidden rounded-xl border border-ink/10 bg-card text-left shadow-[0_1px_0_rgba(39,19,18,0.06)] transition-all duration-300 hover:-translate-y-1.5 hover:border-ink/20 hover:shadow-[0_24px_44px_-20px_rgba(39,19,18,0.35)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brick"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOpen(offer);
+          }
+        }}
+        className="group block w-full cursor-pointer overflow-hidden rounded-xl border border-ink/10 bg-card text-left shadow-[0_1px_0_rgba(39,19,18,0.06)] transition-all duration-300 hover:-translate-y-1.5 hover:border-ink/20 hover:shadow-[0_24px_44px_-20px_rgba(39,19,18,0.35)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brick"
         aria-label={`${offer.merchant} — ${offer.headline}. Open details.`}
       >
         {/* photo */}
@@ -55,6 +65,23 @@ export default function OfferTile({ offer, index, onOpen }: Props) {
             </div>
           )}
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-term/45 to-transparent" />
+
+          {/* follow star */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFollow(offer);
+            }}
+            title={followed ? `Unfollow ${offer.card}` : `Follow ${offer.card}`}
+            aria-label={followed ? "Unfollow" : "Follow"}
+            className={`absolute left-2.5 top-2.5 z-10 flex h-8 w-8 items-center justify-center rounded-full backdrop-blur-sm transition-all active:scale-90 ${
+              followed
+                ? "star-pop bg-amber text-ink shadow-[0_4px_12px_-2px_rgba(232,185,62,0.9)]"
+                : "bg-term/55 text-paper hover:bg-term/80"
+            }`}
+          >
+            <StarIcon filled={followed} className="h-4 w-4" />
+          </button>
 
           {/* expiry badge */}
           <span
@@ -102,7 +129,7 @@ export default function OfferTile({ offer, index, onOpen }: Props) {
             </span>
           </div>
         </div>
-      </button>
+      </div>
     </div>
   );
 }

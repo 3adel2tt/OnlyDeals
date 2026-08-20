@@ -1,5 +1,5 @@
 import type { CustomSource, SourceDef } from "../types";
-import { ArrowUpRight, PlusIcon, TrashIcon } from "./icons";
+import { ArrowUpRight, LockIcon, PlusIcon, TrashIcon } from "./icons";
 
 const SOURCES: SourceDef[] = [
   { id: "alrajhi", name: "Al Rajhi Bank", kind: "credit-card offers", status: "live", progress: 100, note: "10 offers indexed · snapshot fallback wired" },
@@ -34,12 +34,14 @@ function hostOf(url: string): string {
 
 interface Props {
   custom: CustomSource[];
+  isAdmin: boolean;
   onPick: (name: string) => void;
   onAdd: () => void;
   onRemove: (id: string) => void;
+  onRegisterGate: () => void;
 }
 
-export default function SourcesLedger({ custom, onPick, onAdd, onRemove }: Props) {
+export default function SourcesLedger({ custom, isAdmin, onPick, onAdd, onRemove, onRegisterGate }: Props) {
   const rows: Array<SourceDef & { url?: string; customId?: string }> = [
     ...SOURCES,
     ...custom.map((c) => ({
@@ -66,15 +68,28 @@ export default function SourcesLedger({ custom, onPick, onAdd, onRemove }: Props
           </h2>
         </div>
         <div className="flex flex-col items-start gap-2 sm:items-end">
-          <button
-            onClick={onAdd}
-            className="flex items-center gap-2 rounded-full border border-brick/50 bg-card px-4 py-2 font-mono text-[10.5px] uppercase tracking-[0.14em] text-brick transition-all hover:bg-brick hover:text-paper active:scale-95"
-          >
-            <PlusIcon className="h-3.5 w-3.5" />
-            register a source
-          </button>
+          {isAdmin ? (
+            <button
+              onClick={onAdd}
+              className="flex items-center gap-2 rounded-full border border-brick/50 bg-card px-4 py-2 font-mono text-[10.5px] uppercase tracking-[0.14em] text-brick transition-all hover:bg-brick hover:text-paper active:scale-95"
+            >
+              <PlusIcon className="h-3.5 w-3.5" />
+              register a source
+            </button>
+          ) : (
+            <button
+              onClick={onRegisterGate}
+              title="The source registry is admin-only"
+              className="flex items-center gap-2 rounded-full border border-dashed border-line bg-card px-4 py-2 font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-faint transition-all hover:border-brick/50 hover:text-brick active:scale-95"
+            >
+              <LockIcon className="h-3.5 w-3.5" />
+              register — admin only
+            </button>
+          )}
           <p className="max-w-xs text-right text-[12px] leading-relaxed text-ink-soft">
-            Missing a bank? Register its offers page here — it joins the queue for its own engine.
+            {isAdmin
+              ? "Missing a bank? Register its offers page here — it joins the queue for its own engine."
+              : "The source registry is restricted to the web admin."}
           </p>
         </div>
       </div>

@@ -55,6 +55,21 @@ export interface CustomSource {
   createdAt: number;
 }
 
+export type Role = "admin" | "member";
+
+export interface User {
+  id: string;
+  username: string;
+  displayName: string;
+  role: Role;
+  createdAt: number;
+}
+
+/** Internal shape stored in localStorage (never leaves the browser). */
+export interface StoredUser extends User {
+  hash: string;
+}
+
 export interface LogLine {
   id: number;
   time: string;

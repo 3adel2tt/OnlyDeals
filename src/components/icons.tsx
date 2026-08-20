@@ -155,3 +155,51 @@ export function PulseIcon({ className = "w-4 h-4" }: P) {
     </svg>
   );
 }
+
+export function StarIcon({
+  className = "w-4 h-4",
+  filled = false,
+}: P & { filled?: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      className={className}
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="1.6"
+    >
+      <path
+        d="M10 2.9l2.1 4.4 4.9.7-3.5 3.4.8 4.8L10 13.9l-4.3 2.3.8-4.8L3 8l4.9-.7L10 2.9z"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function UserIcon({ className = "w-4 h-4" }: P) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
+      <circle cx="10" cy="7" r="3.2" />
+      <path d="M3.5 16.5c.8-3.2 3.4-4.8 6.5-4.8s5.7 1.6 6.5 4.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function LockIcon({ className = "w-4 h-4" }: P) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
+      <rect x="4.5" y="8.5" width="11" height="8" rx="1.8" />
+      <path d="M7 8.5V6.8a3 3 0 0 1 6 0v1.7M10 12v1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function LogoutIcon({ className = "w-4 h-4" }: P) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M8 3.5H5.5A1.5 1.5 0 0 0 4 5v10a1.5 1.5 0 0 0 1.5 1.5H8M13 7l3 3-3 3M16 10H8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+

@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { BrowseScope, Category, CustomSource, LogLine, Offer, ScrapeStatus } from "./types";
+import type { BrowseScope, Category, CustomSource, LogLine, Offer, ScrapeStatus, User } from "./types";
 import { CATEGORY_LABEL } from "./types";
 import { runScrape } from "./scraper/engine";
 import { daysLeft, formatClock } from "./lib/format";
+import { ensureSeeded, getSession, logout } from "./lib/auth";
+import {
+  cardKey,
+  getFollows,
+  offerFollowed,
+  toggleFollow,
+  vendorKey,
+} from "./lib/follows";
 import TopBar from "./components/TopBar";
 import Ticker from "./components/Ticker";
 import Terminal from "./components/Terminal";
@@ -11,12 +19,14 @@ import OfferModal from "./components/OfferModal";
 import SourcesLedger from "./components/SourcesLedger";
 import BrowseDrawer from "./components/BrowseDrawer";
 import AddSourceModal from "./components/AddSourceModal";
+import AuthModal from "./components/AuthModal";
 import Footer from "./components/Footer";
 import {
   BankIcon,
   CheckIcon,
   CloseIcon,
   SearchIcon,
+  StarIcon,
   StoreIcon,
 } from "./components/icons";
 
@@ -63,6 +73,11 @@ export default function App() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [customSources, setCustomSources] = useState<CustomSource[]>(loadRegistry);
+  const [user, setUser] = useState<User | null>(null);
+  const [follows, setFollows] = useState<string[]>([]);
+  const [view, setView] = useState<"all" | "my">("all");
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authIntent, setAuthIntent] = useState<"generic" | "admin" | "follow">("generic");
   const [, setTick] = useState(0);
 
   const logId = useRef(0);
@@ -70,6 +85,7 @@ export default function App() {
   const started = useRef(false);
   const toastTimer = useRef<number | undefined>(undefined);
   const searchRef = useRef<HTMLInputElement>(null);
+  const followsLoadedRef = useRef(false);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -102,6 +118,16 @@ export default function App() {
     started.current = true;
     runPass();
   }, [runPass]);
+
+  // restore session + follows on mount
+  useEffect(() => {
+    ensureSeeded();
+    const u = getSession();
+    if (u) {
+      setUser(u);
+      setFollows(getFollows(u.id));
+    }
+  }, []);
 
   // keep relative timestamps fresh
   useEffect(() => {
@@ -157,14 +183,117 @@ export default function App() {
     [showToast],
   );
 
+  // ---- auth ----
+  const openAuth = useCallback((intent: "generic" | "admin" | "follow" = "generic") => {
+    setAuthIntent(intent);
+    setAuthOpen(true);
+  }, []);
+
+  const handleAuthed = useCallback(
+    (u: User) => {
+      setUser(u);
+      setFollows(getFollows(u.id));
+      setAuthOpen(false);
+      showToast(`Signed in as ${u.displayName}${u.role === "admin" ? " · admin" : ""}`);
+    },
+    [showToast],
+  );
+
+  const handleLogout = useCallback(() => {
+    logout();
+    setUser(null);
+    setFollows([]);
+    setView("all");
+    showToast("Signed out — back to the public radar");
+  }, [showToast]);
+
+  // gate for admin-only actions (the source registry)
+  const registerGate = useCallback(() => {
+    if (!user) {
+      openAuth("admin");
+      return;
+    }
+    if (user.role !== "admin") {
+      showToast("The registry is admin-only — sign in as the admin to register sources");
+      return;
+    }
+    setAddOpen(true);
+  }, [user, openAuth, showToast]);
+
+  // ---- follows ----
+  const requireAuthThen = useCallback(
+    (fn: () => void, label: string) => {
+      if (!user) {
+        showToast(`Sign in to follow ${label}`);
+        openAuth("follow");
+        return;
+      }
+      fn();
+    },
+    [user, openAuth, showToast],
+  );
+
+  const toggleCard = useCallback(
+    (bank: string, card: string) => {
+      const key = cardKey(bank, card);
+      requireAuthThen(() => {
+        if (!user) return;
+        const next = toggleFollow(user.id, key);
+        setFollows(next);
+      }, card);
+    },
+    [user, requireAuthThen],
+  );
+
+  const toggleVendor = useCallback(
+    (merchant: string) => {
+      const key = vendorKey(merchant);
+      requireAuthThen(() => {
+        if (!user) return;
+        const next = toggleFollow(user.id, key);
+        setFollows(next);
+      }, merchant);
+    },
+    [user, requireAuthThen],
+  );
+
+  const toggleView = useCallback(() => {
+    if (!user) {
+      openAuth("follow");
+      return;
+    }
+    setView((v) => (v === "all" ? "my" : "all"));
+  }, [user, openAuth]);
+
+  // follow state changed → toast the most recent action
+  useEffect(() => {
+    if (!user) return;
+    const count = follows.length;
+    // only toast after the first load (avoid on mount)
+    if (followsLoadedRef.current) {
+      showToast(
+        count === 0
+          ? "Radar cleared — nothing followed"
+          : `Following ${count} ${count === 1 ? "source" : "sources"}`,
+      );
+    }
+    followsLoadedRef.current = true;
+  }, [follows, user, showToast]);
+
+  // ---- my-radar pool: followed offers only ----
+  const pool = useMemo(() => {
+    if (view !== "my" || !user) return offers;
+    return offers.filter((o) => offerFollowed(o, follows));
+  }, [offers, view, user, follows]);
+
   // offers narrowed by the drawer's bank→card / vendor drill-down
   const scoped = useMemo(() => {
-    if (scope.type === "bank") return offers.filter((o) => o.bank === scope.bank);
+    if (scope.type === "bank") return pool.filter((o) => o.bank === scope.bank);
     if (scope.type === "bank-card")
-      return offers.filter((o) => o.bank === scope.bank && o.card === scope.card);
-    if (scope.type === "vendor") return offers.filter((o) => o.merchant === scope.vendor);
-    return offers;
-  }, [offers, scope]);
+      return pool.filter((o) => o.bank === scope.bank && o.card === scope.card);
+    if (scope.type === "vendor") return pool.filter((o) => o.merchant === scope.vendor);
+    return pool;
+  }, [pool, scope]);
 
   const categories = useMemo(
     () => Array.from(new Set(scoped.map((o) => o.category))).sort(),
@@ -218,6 +347,12 @@ export default function App() {
         scrapedAt={scrapedAt}
         onRescrape={runPass}
         onBrowse={() => setDrawerOpen(true)}
+        user={user}
+        view={view}
+        followCount={follows.length}
+        onToggleView={toggleView}
+        onSignIn={() => openAuth("generic")}
+        onLogout={handleLogout}
       />
       <Ticker offers={offers} />
 
@@ -225,9 +360,15 @@ export default function App() {
         {/* intro + terminal */}
         <section className="grid gap-6 pt-8 sm:pt-12 lg:grid-cols-[1.15fr_1fr] lg:items-end">
           <div>
-            <p className="flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.22em] text-brick">
+            <p className="flex flex-wrap items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.22em] text-brick">
               <span className="inline-block h-2 w-2 bg-brick" />
               source 01 · al rajhi bank · card-offers
+              {view === "my" && user && (
+                <span className="star-pop inline-flex items-center gap-1 rounded-full bg-amber px-2 py-0.5 text-[9.5px] font-bold text-ink">
+                  <StarIcon filled className="h-3 w-3" />
+                  my radar · {user.displayName}
+                </span>
+              )}
             </p>
             <h1 className="mt-3 font-display text-[34px] font-extrabold leading-[1.04] tracking-tight text-ink sm:text-[52px]">
               Every card offer on the
@@ -269,9 +410,16 @@ export default function App() {
         <section className="mt-8 flex flex-wrap items-stretch gap-px overflow-hidden rounded-xl border border-line bg-line">
           {[
             {
-              label: "offers loaded",
+              label: view === "my" ? "offers followed" : "offers loaded",
               value: status === "done" ? String(stats.count) : "··",
-              sub: scope.type === "all" ? "al rajhi · card offers" : scopeLabel.toLowerCase(),
+              sub:
+                view === "my"
+                  ? scope.type === "all"
+                    ? `${follows.length} followed sources`
+                    : scopeLabel.toLowerCase()
+                  : scope.type === "all"
+                    ? "al rajhi · card offers"
+                    : scopeLabel.toLowerCase(),
               hot: false,
             },
             {
@@ -403,6 +551,32 @@ export default function App() {
                 <SkeletonTile key={i} />
               ))}
             </div>
+          ) : view === "my" && status === "done" && pool.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-amber/60 bg-amber-soft/50 px-6 py-16 text-center">
+              <StarIcon filled className="h-12 w-12 text-amber" />
+              <p className="font-display text-xl font-bold text-ink">Your radar is empty</p>
+              <p className="max-w-sm text-[13px] leading-relaxed text-ink-soft">
+                {follows.length === 0
+                  ? "Follow a card tier or a merchant — hit the ★ on any tile, or browse banks and vendors — and only those offers will show up here."
+                  : "None of your followed cards or merchants have offers in the current scrape. Try widening back to all offers."}
+              </p>
+              <div className="mt-1 flex flex-wrap justify-center gap-2">
+                <button
+                  onClick={() => {
+                    setDrawerOpen(true);
+                  }}
+                  className="rounded-full bg-ink px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-paper transition-colors hover:bg-brick"
+                >
+                  Browse & follow
+                </button>
+                <button
+                  onClick={() => setView("all")}
+                  className="rounded-full border border-line px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-ink-soft transition-colors hover:border-brick hover:text-brick"
+                >
+                  Back to all offers
+                </button>
+              </div>
+            </div>
           ) : status === "done" && scoped.length === 0 ? (
             <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-line bg-card/60 px-6 py-16 text-center">
               <RadarEmpty />
@@ -425,9 +599,11 @@ export default function App() {
               <RadarEmpty />
               <p className="font-display text-xl font-bold text-ink">Nothing on the radar</p>
               <p className="max-w-sm text-[13px] leading-relaxed text-ink-soft">
-                {scope.type !== "all"
-                  ? `No ${scopeLabel} offers match${search ? ` “${search}”` : ""} in this category. Widen the sweep or step out of scope.`
-                  : `No offers match${search ? ` “${search}”` : ""} in this category. Widen the sweep.`}
+                {view === "my"
+                  ? `None of the offers you follow match${search ? ` “${search}”` : ""} right now. Widen the sweep or check your followed sources.`
+                  : scope.type !== "all"
+                    ? `No ${scopeLabel} offers match${search ? ` “${search}”` : ""} in this category. Widen the sweep or step out of scope.`
+                    : `No offers match${search ? ` “${search}”` : ""} in this category. Widen the sweep.`}
               </p>
               <div className="mt-1 flex flex-wrap justify-center gap-2">
                 {scope.type !== "all" && (
@@ -456,7 +632,14 @@ export default function App() {
           ) : (
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {visible.map((o, i) => (
-                <OfferTile key={o.id} offer={o} index={i} onOpen={setSelected} />
+                <OfferTile
+                  key={o.id}
+                  offer={o}
+                  index={i}
+                  onOpen={setSelected}
+                  followed={follows.includes(cardKey(o.bank, o.card))}
+                  onToggleFollow={(offer) => toggleCard(offer.bank, offer.card)}
+                />
               ))}
             </div>
           )}
@@ -464,9 +647,11 @@ export default function App() {
 
         <SourcesLedger
           custom={customSources}
+          isAdmin={user?.role === "admin"}
           onPick={(name) => showToast(`${name} is queued — register it from Browse to fast-track`)}
           onAdd={() => setAddOpen(true)}
           onRemove={removeSource}
+          onRegisterGate={registerGate}
         />
       </main>
 
@@ -477,6 +662,10 @@ export default function App() {
           offer={selected}
           scrapedAt={scrapedAt}
           live={live}
+          cardFollowed={follows.includes(cardKey(selected.bank, selected.card))}
+          vendorFollowed={follows.includes(vendorKey(selected.merchant))}
+          onToggleCard={(o) => toggleCard(o.bank, o.card)}
+          onToggleVendor={(o) => toggleVendor(o.merchant)}
           onClose={() => setSelected(null)}
           onToast={showToast}
         />
@@ -487,12 +676,17 @@ export default function App() {
         offers={offers}
         custom={customSources}
         active={scope}
+        follows={follows}
+        isAdmin={user?.role === "admin"}
         onApply={applyScope}
         onClose={() => setDrawerOpen(false)}
         onLocked={(name) =>
           showToast(`${name} is still queued — Al Rajhi is the only live source for now`)
         }
         onAdd={() => setAddOpen(true)}
+        onToggleCard={toggleCard}
+        onToggleVendor={toggleVendor}
+        onRegisterGate={registerGate}
       />
 
       <AddSourceModal
@@ -501,6 +695,13 @@ export default function App() {
         onAdd={addSource}
         onRemove={removeSource}
         onClose={() => setAddOpen(false)}
+      />
+
+      <AuthModal
+        open={authOpen}
+        intent={authIntent}
+        onClose={() => setAuthOpen(false)}
+        onAuthed={handleAuthed}
       />
 
       {toast && (
