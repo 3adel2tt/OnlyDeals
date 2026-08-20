@@ -67,6 +67,10 @@ function initialTheme(): "light" | "dark" {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
+function getRoute(): string {
+  return window.location.hash.replace(/^#\/?/, "").split("?")[0];
+}
+
 function loadRegistry(): CustomSource[] {
   try {
     const raw = localStorage.getItem(REGISTRY_KEY);
