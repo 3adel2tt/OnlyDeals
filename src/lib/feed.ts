@@ -5,15 +5,15 @@ import { daysFromNow } from "./format";
 /**
  * The site never scrapes. It reads a feed produced by the n8n workflows:
  *
- *   1. FEED_URL — the merged offradar.json your ingest service publishes
- *      (set this to your server URL, e.g. https://offers.example.com/offradar.json)
+ *   1. FEED_URL — the merged onlydeals.json your ingest service publishes
+ *      (set this to your server URL, e.g. https://offers.example.com/onlydeals.json)
  *   2. localStorage feed — what the admin's "push snapshot" writes, mirroring
  *      exactly what the ingest endpoint stores
  *   3. bundled seed — shipped with the app so the board is never empty
  */
 export const FEED_URL: string | null = null;
 
-const LOCAL_KEY = "offradar:feed:v2";
+const LOCAL_KEY = "onlydeals:feed:v1";
 
 const IMG_ELECTRONICS =
   "https://image.qwenlm.ai/generated-images/b234c9bf-74b2-4f4e-9c88-280e71fea217/_result.png";

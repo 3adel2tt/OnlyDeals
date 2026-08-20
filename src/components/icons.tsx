@@ -2,21 +2,18 @@ interface P {
   className?: string;
 }
 
-/** Radar ring with a percent sign — the slash reads as the sweep line. */
-export function RadarMark({ className = "w-8 h-8", active = false }: P & { active?: boolean }) {
+/** Static deal-tag mark with a % punched through it — the onlydeals brand. */
+export function BrandMark({ className = "w-8 h-8" }: P) {
   return (
-    <svg viewBox="0 0 32 32" className={`${className} ${active ? "" : "radar-idle"}`} fill="none">
-      <circle cx="16" cy="16" r="13.5" stroke="currentColor" strokeWidth="2" />
-      <circle cx="16" cy="16" r="9" stroke="currentColor" strokeWidth="1.2" opacity="0.3" />
-      <g className="radar-sweep">
-        <path d="M16 16 L29 11" stroke="var(--color-amber)" strokeWidth="2.2" strokeLinecap="round" />
-        <path d="M16 16 L27.5 19.5" stroke="var(--color-amber)" strokeWidth="1.2" strokeLinecap="round" opacity="0.4" />
-      </g>
-      {/* % */}
-      <path d="M20.9 10.3 11.1 21.7" stroke="var(--color-brick)" strokeWidth="2.5" strokeLinecap="round" />
-      <circle cx="11.5" cy="11.5" r="3" stroke="var(--color-brick)" strokeWidth="2.1" />
-      <circle cx="20.5" cy="20.5" r="3" stroke="var(--color-brick)" strokeWidth="2.1" />
-      <circle cx="24.6" cy="7.6" r="1.6" fill="var(--color-flare)" />
+    <svg viewBox="0 0 32 32" className={className} aria-hidden="true">
+      <path
+        d="M4.6 16 15.2 5.4a2 2 0 0 1 1.4-.6H26a2.4 2.4 0 0 1 2.4 2.4v17.6A2.4 2.4 0 0 1 26 27.2H16.6a2 2 0 0 1-1.4-.6L4.6 16Z"
+        fill="var(--color-brick)"
+      />
+      <circle cx="9.4" cy="16" r="1.7" fill="var(--color-paper)" />
+      <path d="M23.4 10.6 15.6 21.4" stroke="var(--color-paper)" strokeWidth="2.4" strokeLinecap="round" />
+      <circle cx="15.9" cy="11.6" r="2.3" stroke="var(--color-paper)" strokeWidth="2" fill="none" />
+      <circle cx="23.1" cy="20.4" r="2.3" stroke="var(--color-paper)" strokeWidth="2" fill="none" />
     </svg>
   );
 }
@@ -156,26 +153,9 @@ export function PulseIcon({ className = "w-4 h-4" }: P) {
   );
 }
 
-export function DownloadIcon({ className = "w-4 h-4" }: P) {
+export function StarIcon({ className = "w-4 h-4", filled = false }: P & { filled?: boolean }) {
   return (
-    <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.7">
-      <path d="M10 3v9m0 0 3.2-3.2M10 12 6.8 8.8M4 14.5V16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-export function StarIcon({
-  className = "w-4 h-4",
-  filled = false,
-}: P & { filled?: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 20 20"
-      className={className}
-      fill={filled ? "currentColor" : "none"}
-      stroke="currentColor"
-      strokeWidth="1.6"
-    >
+    <svg viewBox="0 0 20 20" className={className} fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.6">
       <path
         d="M10 2.9l2.1 4.4 4.9.7-3.5 3.4.8 4.8L10 13.9l-4.3 2.3.8-4.8L3 8l4.9-.7L10 2.9z"
         strokeLinejoin="round"
@@ -188,7 +168,7 @@ export function UserIcon({ className = "w-4 h-4" }: P) {
   return (
     <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
       <circle cx="10" cy="7" r="3.2" />
-      <path d="M3.5 16.5c.8-3.2 3.4-4.8 6.5-4.8s5.7 1.6 6.5 4.8" strokeLinecap="round" />
+      <path d="M3.8 16.5c.7-3 3.2-4.5 6.2-4.5s5.5 1.5 6.2 4.5" strokeLinecap="round" />
     </svg>
   );
 }
@@ -196,8 +176,8 @@ export function UserIcon({ className = "w-4 h-4" }: P) {
 export function LockIcon({ className = "w-4 h-4" }: P) {
   return (
     <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
-      <rect x="4.5" y="8.5" width="11" height="8" rx="1.8" />
-      <path d="M7 8.5V6.8a3 3 0 0 1 6 0v1.7M10 12v1.8" strokeLinecap="round" />
+      <rect x="4.5" y="9" width="11" height="8" rx="1.6" />
+      <path d="M7 9V6.8a3 3 0 0 1 6 0V9M10 12.2v1.8" strokeLinecap="round" />
     </svg>
   );
 }
@@ -205,9 +185,43 @@ export function LockIcon({ className = "w-4 h-4" }: P) {
 export function LogoutIcon({ className = "w-4 h-4" }: P) {
   return (
     <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
-      <path d="M8 3.5H5.5A1.5 1.5 0 0 0 4 5v10a1.5 1.5 0 0 0 1.5 1.5H8M13 7l3 3-3 3M16 10H8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 4H5.5A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8M13 7l3 3-3 3M16 10H8.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
+export function DownloadIcon({ className = "w-4 h-4" }: P) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.7">
+      <path d="M10 3.5v9m0 0 3.5-3.5M10 12.5 6.5 9M4 14.5v1A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5v-1" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
+export function SunIcon({ className = "w-4 h-4" }: P) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
+      <circle cx="10" cy="10" r="3.6" />
+      <path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function MoonIcon({ className = "w-4 h-4" }: P) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M16.5 11.8A6.8 6.8 0 0 1 8.2 3.5a6.8 6.8 0 1 0 8.3 8.3Z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function WorkflowIcon({ className = "w-4 h-4" }: P) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="2.5" y="3" width="5" height="5" rx="1.2" />
+      <rect x="12.5" y="12" width="5" height="5" rx="1.2" />
+      <rect x="12.5" y="3" width="5" height="5" rx="1.2" />
+      <path d="M7.5 5.5h5M15 8v4M7.5 14.5h5" strokeLinecap="round" />
+    </svg>
+  );
+}

@@ -93,7 +93,7 @@ export default function AddSourceModal({ open, sources, onAdd, onRemove, onClose
     if (!trimmed) return setError("Give the source a name.");
     const lower = trimmed.toLowerCase();
     if (RESERVED.some((r) => lower.includes(r)) || sources.some((s) => s.name.toLowerCase() === lower)) {
-      return setError("That source is already on the radar.");
+      return setError("That source is already on onlydeals.");
     }
     const clean = normaliseUrl(url);
     if (!clean) return setError("That URL doesn't parse — include the full page, e.g. https://bank.com/offers");
@@ -251,7 +251,7 @@ export default function AddSourceModal({ open, sources, onAdd, onRemove, onClose
             className="flex w-full items-center justify-center gap-2 rounded-full bg-brick px-5 py-3 font-mono text-[11.5px] font-medium uppercase tracking-[0.14em] text-paper transition-all hover:bg-ink active:scale-[0.98]"
           >
             <PlusIcon className="h-3.5 w-3.5" />
-            Add to radar
+            Add to onlydeals
           </button>
         </div>
 

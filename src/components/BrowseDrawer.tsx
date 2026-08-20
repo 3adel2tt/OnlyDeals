@@ -168,7 +168,7 @@ export default function BrowseDrawer({
         <div className="flex items-center gap-3 border-b border-term-line px-5 pb-4 pt-5">
           <div>
             <p className="font-mono text-[9.5px] uppercase tracking-[0.24em] text-[#8f766f]">
-              /// browse the radar
+              /// browse onlydeals
             </p>
             <h2 className="mt-1 font-display text-xl font-extrabold tracking-tight">
               {tab === "banks" ? (drilled ? drilled.bank : "Offers by bank") : "Offers by vendor"}

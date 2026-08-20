@@ -3,7 +3,7 @@ import { daysLeft } from "../lib/format";
 
 function itemsFrom(offers: Offer[]): string[] {
   if (offers.length === 0)
-    return ["OFFRADAR · SYNCING FEED · ENGINES AL RAJHI + JARIR ON N8N · STAND BY"];
+    return ["ONLYDEALS · SYNCING FEED · ENGINES AL RAJHI + JARIR ON N8N · STAND BY"];
   return offers.map((o) => {
     const exp = o.expiresAt ? `${daysLeft(o.expiresAt)}D LEFT` : "OPEN-ENDED";
     return `${o.merchant.toUpperCase()} ${o.discountLabel} · ${exp}`;

@@ -44,7 +44,28 @@ import {
 type SortKey = "expiring" | "value" | "recent";
 
 const ADMIN_ROUTE = "adminn";
-const REGISTRY_KEY = "offradar.registry.v1";
+const REGISTRY_KEY = "onlydeals.registry.v1";
+const THEME_KEY = "onlydeals.theme";
+
+function isAdminRoute(): boolean {
+  const path = window.location.pathname.replace(/\/+$/, "");
+  return path.endsWith("/adminn") || window.location.hash.includes("adminn");
+}
+
+/** Base the app is served under, so /adminn works from any mount point. */
+function basePath(): string {
+  return window.location.pathname.replace(/adminn\/?$/, "");
+}
+
+function initialTheme(): "light" | "dark" {
+  try {
+    const t = localStorage.getItem(THEME_KEY);
+    if (t === "dark" || t === "light") return t;
+  } catch {
+    /* ignore */
+  }
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
 
 function getRoute(): string {
   return window.location.hash.replace(/^#\/?/, "").split("?")[0];
@@ -75,23 +96,56 @@ function SkeletonTile() {
   );
 }
 
-/* ---------------- router ---------------- */
+/* ---------------- router + theme ---------------- */
 
 export default function App() {
-  const [route, setRoute] = useState(getRoute);
+  const [admin, setAdmin] = useState(isAdminRoute);
+  const [theme, setTheme] = useState<"light" | "dark">(initialTheme);
 
   useEffect(() => {
-    const onHash = () => setRoute(getRoute());
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
+    const onChange = () => setAdmin(isAdminRoute());
+    window.addEventListener("popstate", onChange);
+    window.addEventListener("hashchange", onChange);
+    return () => {
+      window.removeEventListener("popstate", onChange);
+      window.removeEventListener("hashchange", onChange);
+    };
   }, []);
 
-  return route === ADMIN_ROUTE ? <AdminApp /> : <SiteApp />;
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      /* ignore */
+    }
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((t) => (t === "dark" ? "light" : "dark"));
+  }, []);
+
+  const navigate = useCallback((to: "public" | "admin") => {
+    const url = to === "admin" ? `${basePath()}adminn` : basePath() || "/";
+    try {
+      window.history.pushState(null, "", url);
+    } catch {
+      window.location.hash = to === "admin" ? "#/adminn" : "#/";
+    }
+    setAdmin(to === "admin");
+    window.scrollTo({ top: 0 });
+  }, []);
+
+  return admin ? (
+    <AdminApp theme={theme} onToggleTheme={toggleTheme} onExit={() => navigate("public")} />
+  ) : (
+    <SiteApp theme={theme} onToggleTheme={toggleTheme} />
+  );
 }
 
 /* ---------------- public site: pure feed reader ---------------- */
 
-function SiteApp() {
+function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTheme: () => void }) {
   const [payload, setPayload] = useState<FeedPayload | null>(null);
   const [feedStatus, setFeedStatus] = useState<FeedStatus>("idle");
   const [provenance, setProvenance] = useState<FeedProvenance | null>(null);
@@ -133,7 +187,7 @@ function SiteApp() {
     const log = (kind: LogLine["kind"], text: string) =>
       setLogs((prev) => [...prev, { id: ++logId.current, time: formatClock(Date.now()), kind, text }]);
 
-    log("sys", "offradar v0.4 · feed sync start");
+    log("sys", "onlydeals v0.5 · feed sync start");
     if (FEED_URL) log("info", `GET ${FEED_URL}`);
     else log("warn", "FEED_URL not configured (src/lib/feed.ts) — checking local ingest store");
     await sleep(420);
@@ -232,7 +286,7 @@ function SiteApp() {
     setUser(null);
     setFollows([]);
     setView("all");
-    showToast("Signed out — back to the public radar");
+    showToast("Signed out — back to the public board");
   }, [showToast]);
 
   // ---- follows ----
@@ -287,7 +341,7 @@ function SiteApp() {
     if (followsLoadedRef.current) {
       showToast(
         count === 0
-          ? "Radar cleared — nothing followed"
+          ? "Deals list cleared — nothing followed"
           : `Following ${count} ${count === 1 ? "source" : "sources"}`,
       );
     }
@@ -366,8 +420,10 @@ function SiteApp() {
         feedStatus={feedStatus}
         provenance={provenance}
         lastSync={lastSync}
+        theme={theme}
         onSync={syncPass}
         onBrowse={() => setDrawerOpen(true)}
+        onToggleTheme={onToggleTheme}
         user={user}
         view={view}
         followCount={follows.length}
@@ -387,7 +443,7 @@ function SiteApp() {
               {view === "my" && user && (
                 <span className="star-pop inline-flex items-center gap-1 rounded-full bg-amber px-2 py-0.5 text-[9.5px] font-bold text-ink">
                   <StarIcon filled className="h-3 w-3" />
-                  my radar · {user.displayName}
+                  my deals · {user.displayName}
                 </span>
               )}
             </p>
@@ -576,7 +632,7 @@ function SiteApp() {
           ) : view === "my" && done && pool.length === 0 ? (
             <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-amber/60 bg-amber-soft/50 px-6 py-16 text-center">
               <StarIcon filled className="h-12 w-12 text-amber" />
-              <p className="font-display text-xl font-bold text-ink">Your radar is empty</p>
+              <p className="font-display text-xl font-bold text-ink">Your deals list is empty</p>
               <p className="max-w-sm text-[13px] leading-relaxed text-ink-soft">
                 {follows.length === 0
                   ? "Follow a card tier or a merchant — hit the ★ on any tile, or browse banks and vendors — and only those offers will show up here."
@@ -599,7 +655,7 @@ function SiteApp() {
             </div>
           ) : done && scoped.length === 0 ? (
             <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-line bg-card/60 px-6 py-16 text-center">
-              <RadarEmpty />
+              <TagEmpty />
               <p className="font-display text-xl font-bold text-ink">
                 Nothing in the feed for {scopeLabel} yet
               </p>
@@ -616,8 +672,8 @@ function SiteApp() {
             </div>
           ) : visible.length === 0 ? (
             <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-line bg-card/60 px-6 py-16 text-center">
-              <RadarEmpty />
-              <p className="font-display text-xl font-bold text-ink">Nothing on the radar</p>
+              <TagEmpty />
+              <p className="font-display text-xl font-bold text-ink">No deals on the board</p>
               <p className="max-w-sm text-[13px] leading-relaxed text-ink-soft">
                 {view === "my"
                   ? `None of the offers you follow match${search ? ` “${search}”` : ""} right now. Widen the sweep or check your followed sources.`
@@ -716,13 +772,19 @@ function SiteApp() {
   );
 }
 
-function RadarEmpty() {
+function TagEmpty() {
   return (
     <svg viewBox="0 0 48 48" className="h-12 w-12 text-ink-faint" fill="none">
-      <circle cx="24" cy="24" r="19" stroke="currentColor" strokeWidth="2" opacity="0.5" />
-      <circle cx="24" cy="24" r="11" stroke="currentColor" strokeWidth="1.5" opacity="0.35" />
-      <circle cx="24" cy="24" r="2.5" fill="currentColor" opacity="0.6" />
-      <path d="M24 24 L40 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" opacity="0.4" />
+      <path
+        d="M7 24 22.8 8.2a3 3 0 0 1 2.1-.9H38a3.6 3.6 0 0 1 3.6 3.6v26.2A3.6 3.6 0 0 1 38 40.7H24.9a3 3 0 0 1-2.1-.9L7 24Z"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        opacity="0.55"
+      />
+      <circle cx="14.2" cy="24" r="2.4" stroke="currentColor" strokeWidth="2" opacity="0.6" />
+      <path d="M35 16.5 23.5 32" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" opacity="0.7" />
+      <circle cx="24.3" cy="17.8" r="3.2" stroke="currentColor" strokeWidth="2.2" opacity="0.7" />
+      <circle cx="34.2" cy="30.4" r="3.2" stroke="currentColor" strokeWidth="2.2" opacity="0.7" />
     </svg>
   );
 }

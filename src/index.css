@@ -24,6 +24,29 @@
   --color-term-line: #35211f;
 }
 
+/* ---------- dark theme: override the tokens, everything follows ---------- */
+:root.dark {
+  --color-paper: #171010;
+  --color-card: #211614;
+  --color-ink: #f2e9e2;
+  --color-ink-soft: #c2afa7;
+  --color-ink-faint: #8d7a72;
+  --color-line: #35241f;
+  --color-brick: #e63a52;
+  --color-tint: #2d1b16;
+  --color-amber-soft: #33270e;
+  --color-ember-soft: #341810;
+  --color-term: #100a09;
+  --color-term-line: #2b1d19;
+}
+
+:root.dark body {
+  background-image:
+    radial-gradient(1100px 520px at 8% -6%, rgba(230, 58, 82, 0.1), transparent 62%),
+    radial-gradient(900px 480px at 100% 12%, rgba(232, 185, 62, 0.06), transparent 60%),
+    radial-gradient(rgba(242, 233, 226, 0.05) 1px, transparent 1px);
+}
+
 html {
   scroll-behavior: smooth;
 }
