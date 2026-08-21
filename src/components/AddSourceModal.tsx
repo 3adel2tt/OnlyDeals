@@ -14,16 +14,7 @@ import {
 
 const RELAY = "https://api.allorigins.win/raw?url=";
 
-const RESERVED = [
-  "al rajhi",
-  "alrajhi",
-  "snb",
-  "alahli",
-  "riyad bank",
-  "tamara",
-  "amazon",
-  "noon",
-];
+const RESERVED = ["al rajhi", "alrajhi", "snb", "alahli", "riyad bank", "tamara", "amazon", "noon", "jarir"];
 
 function normaliseUrl(raw: string): string | null {
   let v = raw.trim();
@@ -156,11 +147,11 @@ export default function AddSourceModal({ open, sources, onAdd, onRemove, onClose
           Add a bank or vendor
         </h2>
         <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">
-          Register the offers page of a source that's missing. It's stored in this browser,
-          appears in the browse menu and pipeline, and queues for its own scraper engine.
+          Register the offers page of a source that's missing. It appears on the public
+          ledger as queued, then gets its own n8n workflow (duplicate a source workflow,
+          rename the webhook — it will show up on the Workflows page automatically).
         </p>
 
-        {/* kind toggle */}
         <div className="mt-4 grid grid-cols-2 gap-1 rounded-lg border border-line bg-paper p-1">
           {(
             [
@@ -183,7 +174,6 @@ export default function AddSourceModal({ open, sources, onAdd, onRemove, onClose
           ))}
         </div>
 
-        {/* form */}
         <div className="mt-4 space-y-3">
           <div>
             <label className="mb-1 block font-mono text-[9.5px] uppercase tracking-[0.16em] text-ink-faint">
@@ -255,15 +245,14 @@ export default function AddSourceModal({ open, sources, onAdd, onRemove, onClose
           </button>
         </div>
 
-        {/* registry list */}
         <div className="mt-6 border-t border-line pt-4">
           <p className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-ink-faint">
-            Your registry · {sources.length} saved in this browser
+            Registry · {sources.length} saved
           </p>
 
           {sources.length === 0 ? (
             <p className="mt-3 rounded-lg border border-dashed border-line px-3 py-4 text-center text-[12.5px] text-ink-faint">
-              Nothing registered yet — the pipeline above is all there is.
+              Nothing registered beyond the pipeline — yet.
             </p>
           ) : (
             <ul className="mt-3 space-y-2">
@@ -337,8 +326,8 @@ export default function AddSourceModal({ open, sources, onAdd, onRemove, onClose
           )}
 
           <p className="mt-3 text-[11px] leading-relaxed text-ink-faint">
-            "Probe" pings the page through the same CORS relay the scraper uses — a green tick
-            means an engine can be written for it.
+            "Probe" pings the page through a public CORS relay — a green tick means an n8n
+            workflow can reach it from your server too.
           </p>
         </div>
       </div>

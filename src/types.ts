@@ -20,10 +20,6 @@ export interface Offer {
   value: number;
   kind: "percent" | "cashback" | "bogo" | "installments";
   category: Category;
-  /** Issuing bank this offer was scraped from */
-  bank: string;
-  /** Card tier the offer is attached to */
-  card: string;
   image: string;
   cards: string[];
   code?: string;
@@ -31,29 +27,16 @@ export interface Offer {
   /** ISO date or null when the page doesn't publish one */
   expiresAt: string | null;
   terms: string[];
+  /** attribution axes for browse + follows */
+  bank: string;
+  card: string;
 }
 
-export type SourceId = "alrajhi" | "snb" | "riyad" | "tamara" | "amazon" | "noon";
-
-export interface SourceDef {
-  id: string;
-  name: string;
-  kind: string;
-  status: "live" | "drafting" | "queued" | "registered";
-  progress: number;
-  note: string;
-}
-
-/** A bank or vendor the user registers from the UI. Persisted locally. */
-export interface CustomSource {
-  id: string;
-  kind: "bank" | "vendor";
-  name: string;
-  url: string;
-  note?: string;
-  category?: Category;
-  createdAt: number;
-}
+export type BrowseScope =
+  | { type: "all" }
+  | { type: "bank"; bank: string }
+  | { type: "bank-card"; bank: string; card: string }
+  | { type: "vendor"; vendor: string };
 
 export type Role = "admin" | "member";
 
@@ -68,6 +51,17 @@ export interface User {
 /** Internal shape stored in localStorage (never leaves the browser). */
 export interface StoredUser extends User {
   hash: string;
+}
+
+/** A bank or vendor the admin registers. Persisted locally. */
+export interface CustomSource {
+  id: string;
+  kind: "bank" | "vendor";
+  name: string;
+  url: string;
+  note?: string;
+  category?: Category;
+  createdAt: number;
 }
 
 export interface LogLine {
@@ -100,12 +94,6 @@ export interface FeedPayload {
 
 export type FeedProvenance = "remote" | "local" | "bundled";
 export type FeedStatus = "idle" | "syncing" | "done";
-
-export type BrowseScope =
-  | { type: "all" }
-  | { type: "bank"; bank: string }
-  | { type: "bank-card"; bank: string; card: string }
-  | { type: "vendor"; vendor: string };
 
 export const CATEGORY_LABEL: Record<Category, string> = {
   dining: "Dining",

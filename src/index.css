@@ -5,7 +5,7 @@
   --font-body: "Instrument Sans", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  /* red theme · v0.2 */
+  /* red theme · v0.5 */
   --color-paper: #f3efec;
   --color-card: #fbf9f6;
   --color-ink: #271312;
@@ -24,27 +24,23 @@
   --color-term-line: #35211f;
 }
 
-/* ---------- dark theme: override the tokens, everything follows ---------- */
-:root.dark {
-  --color-paper: #171010;
-  --color-card: #211614;
-  --color-ink: #f2e9e2;
-  --color-ink-soft: #c2afa7;
-  --color-ink-faint: #8d7a72;
-  --color-line: #35241f;
-  --color-brick: #e63a52;
-  --color-tint: #2d1b16;
-  --color-amber-soft: #33270e;
-  --color-ember-soft: #341810;
-  --color-term: #100a09;
-  --color-term-line: #2b1d19;
-}
+@custom-variant dark (&:where(.dark, .dark *));
 
-:root.dark body {
-  background-image:
-    radial-gradient(1100px 520px at 8% -6%, rgba(230, 58, 82, 0.1), transparent 62%),
-    radial-gradient(900px 480px at 100% 12%, rgba(232, 185, 62, 0.06), transparent 60%),
-    radial-gradient(rgba(242, 233, 226, 0.05) 1px, transparent 1px);
+.dark {
+  --color-paper: #141010;
+  --color-card: #1d1615;
+  --color-ink: #f1e9e5;
+  --color-ink-soft: #c4b2ac;
+  --color-ink-faint: #8a766f;
+  --color-line: #332725;
+  --color-brick: #ff5747;
+  --color-flare: #ff5747;
+  --color-tint: #2a1a18;
+  --color-amber-soft: #2b2213;
+  --color-ember: #ff7a5c;
+  --color-ember-soft: #33190f;
+  --color-term: #100c0c;
+  --color-term-line: #2b1e1c;
 }
 
 html {
@@ -61,11 +57,19 @@ body {
     radial-gradient(rgba(39, 19, 18, 0.07) 1px, transparent 1px);
   background-size: auto, auto, 22px 22px;
   background-attachment: fixed;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.dark body {
+  background-image:
+    radial-gradient(1100px 520px at 8% -6%, rgba(255, 87, 71, 0.07), transparent 62%),
+    radial-gradient(900px 480px at 100% 12%, rgba(232, 185, 62, 0.06), transparent 60%),
+    radial-gradient(rgba(241, 233, 229, 0.06) 1px, transparent 1px);
 }
 
 ::selection {
   background: var(--color-flare);
-  color: var(--color-term);
+  color: #1a0d0b;
 }
 
 /* ---------- terminal ---------- */
@@ -75,14 +79,6 @@ body {
 
 @keyframes blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0; } }
 .caret { animation: blink 1s steps(1) infinite; }
-
-/* ---------- radar sweep ---------- */
-@keyframes radar-sweep { to { transform: rotate(360deg); } }
-.radar-sweep {
-  transform-origin: 16px 16px;
-  animation: radar-sweep 2.8s linear infinite;
-}
-.radar-idle .radar-sweep { animation-duration: 7s; }
 
 @keyframes ping-dot {
   0% { transform: scale(1); opacity: 0.7; }

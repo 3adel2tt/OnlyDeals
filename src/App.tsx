@@ -8,11 +8,10 @@ import type {
   FeedStatus,
   LogLine,
   Offer,
-  SourceOutcome,
   User,
 } from "./types";
 import { CATEGORY_LABEL } from "./types";
-import { FEED_URL, loadFeed, PROVENANCE_NOTE } from "./lib/feed";
+import { FEED_URL, PROVENANCE_NOTE, loadFeed } from "./lib/feed";
 import { daysLeft, formatClock } from "./lib/format";
 import { ensureSeeded, getSession, logout } from "./lib/auth";
 import {
@@ -43,7 +42,6 @@ import {
 
 type SortKey = "expiring" | "value" | "recent";
 
-const ADMIN_ROUTE = "adminn";
 const REGISTRY_KEY = "onlydeals.registry.v1";
 const THEME_KEY = "onlydeals.theme";
 
@@ -65,10 +63,6 @@ function initialTheme(): "light" | "dark" {
     /* ignore */
   }
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
-function getRoute(): string {
-  return window.location.hash.replace(/^#\/?/, "").split("?")[0];
 }
 
 function loadRegistry(): CustomSource[] {
@@ -164,7 +158,6 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
   const [view, setView] = useState<"all" | "my">("all");
   const [authOpen, setAuthOpen] = useState(false);
   const [authIntent, setAuthIntent] = useState<"generic" | "follow">("generic");
-  const [, setTick] = useState(0);
 
   const logId = useRef(0);
   const syncing = useRef(false);
@@ -219,26 +212,18 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
     syncPass();
   }, [syncPass]);
 
-  // restore session + follows on mount
+  // restore session + follows on mount (kick out any lingering admin session)
   useEffect(() => {
     ensureSeeded();
     const u = getSession();
     if (u) {
       if (u.role === "admin") {
-        // admins live in the control room — the public site is members-only
         logout();
         return;
       }
       setUser(u);
       setFollows(getFollows(u.id));
-      followsLoadedRef.current = true;
     }
-  }, []);
-
-  // keep relative timestamps fresh
-  useEffect(() => {
-    const t = window.setInterval(() => setTick((x) => x + 1), 30_000);
-    return () => window.clearInterval(t);
   }, []);
 
   // "/" focuses search
@@ -274,7 +259,6 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
     (u: User) => {
       setUser(u);
       setFollows(getFollows(u.id));
-      followsLoadedRef.current = true;
       setAuthOpen(false);
       showToast(`Signed in as ${u.displayName}`);
     },
@@ -304,10 +288,9 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
 
   const toggleCard = useCallback(
     (bank: string, card: string) => {
-      const key = cardKey(bank, card);
       requireAuthThen(() => {
         if (!user) return;
-        const next = toggleFollow(user.id, key);
+        const next = toggleFollow(user.id, cardKey(bank, card));
         setFollows(next);
       }, card);
     },
@@ -316,10 +299,9 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
 
   const toggleVendor = useCallback(
     (merchant: string) => {
-      const key = vendorKey(merchant);
       requireAuthThen(() => {
         if (!user) return;
-        const next = toggleFollow(user.id, key);
+        const next = toggleFollow(user.id, vendorKey(merchant));
         setFollows(next);
       }, merchant);
     },
@@ -334,7 +316,7 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
     setView((v) => (v === "all" ? "my" : "all"));
   }, [user, openAuth]);
 
-  // follow state changed → toast the most recent action
+  // follow state changed → toast the most recent action (skip first load)
   useEffect(() => {
     if (!user) return;
     const count = follows.length;
@@ -348,14 +330,12 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
     followsLoadedRef.current = true;
   }, [follows, user, showToast]);
 
-  // ---- derived feed data ----
-  const offers = useMemo(() => payload?.offers ?? [], [payload]);
-  const outcomes = useMemo<SourceOutcome[]>(() => payload?.sources ?? [], [payload]);
+  const offers = payload?.offers ?? [];
+  const outcomes = payload?.sources ?? [];
+  const generator = payload?.generator ?? "—";
   const done = feedStatus === "done";
-  const live = provenance === "remote" || provenance === "local";
-  const note = provenance ? PROVENANCE_NOTE[provenance] : "";
 
-  // ---- my-radar pool: followed offers only ----
+  // ---- my-deals pool: followed offers only ----
   const pool = useMemo(() => {
     if (view !== "my" || !user) return offers;
     return offers.filter((o) => offerFollowed(o, follows));
@@ -437,47 +417,29 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
         {/* intro + feed log */}
         <section className="grid gap-6 pt-8 sm:pt-12 lg:grid-cols-[1.15fr_1fr] lg:items-end">
           <div>
-            <p className="flex flex-wrap items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.22em] text-brick">
+            <p className="flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.22em] text-brick">
               <span className="inline-block h-2 w-2 bg-brick" />
-              fed by n8n · engines alrajhi + jarir
-              {view === "my" && user && (
-                <span className="star-pop inline-flex items-center gap-1 rounded-full bg-amber px-2 py-0.5 text-[9.5px] font-bold text-ink">
-                  <StarIcon filled className="h-3 w-3" />
-                  my deals · {user.displayName}
-                </span>
-              )}
+              feed-driven board · engines on n8n
             </p>
-            <h1 className="mt-3 font-display text-[34px] font-extrabold leading-[1.04] tracking-tight text-ink sm:text-[52px]">
-              Every card offer on the
-              <br className="hidden sm:block" /> bank's page,{" "}
-              <span className="relative inline-block">
-                scraped&nbsp;&amp;&nbsp;sorted.
-                <svg
-                  viewBox="0 0 220 12"
-                  className="absolute -bottom-1.5 left-0 w-full text-amber"
-                  fill="none"
-                  preserveAspectRatio="none"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M3 9 C 40 3, 75 3, 110 7 S 180 10, 217 4"
-                    stroke="currentColor"
-                    strokeWidth="4.5"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </span>
+            <h1 className="mt-3 font-display text-[42px] font-extrabold leading-[1.02] tracking-tight text-ink sm:text-[58px]">
+              Every card deal,
+              <br />
+              one <span className="text-brick">board.</span>
             </h1>
-            <p className="mt-5 max-w-xl text-[14.5px] leading-relaxed text-ink-soft">
-              The scraping runs server-side on n8n — one workflow per source, a master
-              scheduler fanning them out. This board only reads the feed they produce:
-              what you save, which card tier qualifies, the code, the exact date it dies.
+            <p className="mt-4 max-w-lg text-[15px] leading-relaxed text-ink-soft">
+              onlydeals reads what your n8n workflows produce — Al Rajhi, Jarir, and whatever
+              you plug in next. Follow a card tier or a merchant and keep{" "}
+              <button
+                onClick={toggleView}
+                className="font-semibold text-brick underline decoration-brick/40 underline-offset-4 transition-colors hover:decoration-brick"
+              >
+                your own deals list
+              </button>
+              .
             </p>
-            {done && (
-              <p className="mt-3 flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-faint">
-                <span className={`inline-block h-1.5 w-1.5 rounded-full ${live ? "bg-live" : "bg-amber"}`} />
-                {note}
-                {payload ? ` · generated by ${payload.generator}` : ""}
+            {provenance && (
+              <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+                {PROVENANCE_NOTE[provenance]}
               </p>
             )}
           </div>
@@ -485,19 +447,12 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
         </section>
 
         {/* stats strip */}
-        <section className="mt-8 flex flex-wrap items-stretch gap-px overflow-hidden rounded-xl border border-line bg-line">
+        <section className="mt-8 grid grid-cols-1 divide-y divide-line overflow-hidden rounded-xl border border-line bg-card sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           {[
             {
-              label: view === "my" ? "offers followed" : "offers in feed",
+              label: view === "my" ? "offers you follow" : "offers on the board",
               value: done ? String(stats.count) : "··",
-              sub:
-                view === "my"
-                  ? scope.type === "all"
-                    ? `${follows.length} followed sources`
-                    : scopeLabel.toLowerCase()
-                  : scope.type === "all"
-                    ? "al rajhi · jarir · offer.v1"
-                    : scopeLabel.toLowerCase(),
+              sub: generator,
               hot: false,
             },
             {
@@ -529,6 +484,25 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
 
         {/* control deck */}
         <section id="board" className="mt-8 scroll-mt-24">
+          {view === "my" && user && (
+            <div className="fade-in mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-amber/50 bg-amber-soft/70 px-4 py-2.5">
+              <StarIcon filled className="h-4 w-4 text-[#8a6410]" />
+              <span className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-[#8a6410]/80">
+                my deals · {user.displayName}
+              </span>
+              <span className="font-display text-[14.5px] font-bold tracking-tight text-ink">
+                {follows.length} followed {follows.length === 1 ? "source" : "sources"}
+              </span>
+              <button
+                onClick={() => setView("all")}
+                className="ml-auto flex items-center gap-1.5 rounded-full border border-amber/60 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#8a6410] transition-all hover:bg-amber hover:text-ink active:scale-95"
+              >
+                <CloseIcon className="h-3 w-3" />
+                show all offers
+              </button>
+            </div>
+          )}
+
           {scope.type !== "all" && (
             <div className="fade-in mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-brick/30 bg-tint/70 px-4 py-2.5">
               {scope.type === "vendor" ? (
@@ -605,7 +579,7 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
                 ? scope.type !== "all"
                   ? `showing ${visible.length} of ${scoped.length} · in scope`
                   : `showing ${visible.length} of ${offers.length}`
-                : "syncing feed…"}
+                : "receiving transmission…"}
             </p>
             {filtering && (
               <button
@@ -721,7 +695,11 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
           )}
         </section>
 
-        <SourcesLedger outcomes={outcomes} custom={customSources} />
+        <SourcesLedger
+          outcomes={outcomes}
+          custom={customSources}
+          onPick={(name: string) => showToast(`${name} is queued — register it from the control room`)}
+        />
       </main>
 
       <Footer />
@@ -730,7 +708,7 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
         <OfferModal
           offer={selected}
           scrapedAt={lastSync}
-          live={live}
+          generator={generator}
           cardFollowed={follows.includes(cardKey(selected.bank, selected.card))}
           vendorFollowed={follows.includes(vendorKey(selected.merchant))}
           onToggleCard={(o) => toggleCard(o.bank, o.card)}
@@ -749,7 +727,7 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
         onApply={applyScope}
         onClose={() => setDrawerOpen(false)}
         onLocked={(name) =>
-          showToast(`${name} is still queued — its workflow isn't deployed yet`)
+          showToast(`${name} is queued — its n8n workflow hasn't posted offers yet`)
         }
         onToggleCard={toggleCard}
         onToggleVendor={toggleVendor}

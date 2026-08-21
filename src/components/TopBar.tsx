@@ -43,11 +43,12 @@ export default function TopBar({
   onLogout,
 }: Props) {
   const syncing = feedStatus === "syncing";
+  const done = feedStatus === "done";
   const live = provenance !== null && provenance !== "bundled";
 
   const dotClass = syncing
     ? "bg-amber text-amber"
-    : feedStatus === "done"
+    : done
       ? live
         ? "bg-live text-live"
         : "bg-amber text-amber"
@@ -55,8 +56,8 @@ export default function TopBar({
 
   const label = syncing
     ? "SYNCING…"
-    : feedStatus === "done"
-      ? `${live ? "LIVE FEED" : "SEED"} · ${lastSync ? timeAgo(lastSync).toUpperCase() : ""}`
+    : done
+      ? `${provenance === "remote" ? "LIVE FEED" : provenance === "local" ? "LOCAL PUSH" : "SEED"} · ${lastSync ? timeAgo(lastSync).toUpperCase() : ""}`
       : "STANDBY";
 
   return (
@@ -71,7 +72,7 @@ export default function TopBar({
           <span className="hidden lg:inline">Browse</span>
         </button>
 
-        <a href="/" className="flex min-w-0 items-center gap-2.5">
+        <a href={basePathHome()} className="flex min-w-0 items-center gap-2.5">
           <BrandMark className="h-8 w-8 shrink-0" />
           <span className="leading-none">
             <span className="block font-display text-[19px] font-extrabold tracking-tight text-ink">
@@ -85,11 +86,10 @@ export default function TopBar({
 
         <div className="ml-auto flex items-center gap-2">
           <span className="hidden items-center gap-2 rounded-full border border-line bg-card px-3 py-1.5 font-mono text-[10px] tracking-[0.14em] text-ink-soft xl:flex">
-            <span className={`relative inline-block h-2 w-2 rounded-full ${dotClass} ${syncing || feedStatus === "done" ? "ping-dot" : ""}`} />
+            <span className={`relative inline-block h-2 w-2 rounded-full ${dotClass} ${syncing || done ? "ping-dot" : ""}`} />
             {label}
           </span>
 
-          {/* dark mode */}
           <button
             onClick={onToggleTheme}
             title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
@@ -99,7 +99,6 @@ export default function TopBar({
             {theme === "dark" ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
           </button>
 
-          {/* sync feed */}
           <button
             onClick={onSync}
             disabled={syncing}
@@ -110,7 +109,6 @@ export default function TopBar({
             <span className="hidden md:inline">{syncing ? "Syncing" : "Sync feed"}</span>
           </button>
 
-          {/* My deals */}
           <button
             onClick={onToggleView}
             title={user ? "Your followed offers" : "Sign in to build your deals list"}
@@ -131,7 +129,6 @@ export default function TopBar({
             </span>
           </button>
 
-          {/* user area */}
           {user ? (
             <div className="flex items-center gap-1.5 rounded-full border border-line bg-card py-1 pl-1 pr-1">
               <span
@@ -170,4 +167,9 @@ export default function TopBar({
       </div>
     </header>
   );
+}
+
+function basePathHome(): string {
+  const path = window.location.pathname.replace(/adminn\/?$/, "");
+  return path || "/";
 }

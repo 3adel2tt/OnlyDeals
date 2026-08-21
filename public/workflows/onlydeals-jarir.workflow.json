@@ -1,5 +1,5 @@
 {
-  "name": "onlydeals · Source · Jarir",
+  "name": "OnlyDeals · Source · Jarir",
   "nodes": [
     {
       "parameters": {
@@ -74,10 +74,10 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ONLYDEALS_INGEST_URL }}",
+        "url": "={{ $env.OFFRADAR_INGEST_URL }}",
         "sendHeaders": true,
         "headerParameters": {
-          "parameters": [{ "name": "x-api-key", "value": "={{ $env.ONLYDEALS_API_KEY }}" }]
+          "parameters": [{ "name": "x-api-key", "value": "={{ $env.OFFRADAR_API_KEY }}" }]
         },
         "sendBody": true,
         "specifyBody": "json",
@@ -92,13 +92,41 @@
     },
     {
       "parameters": {
-        "jsCode": "const count = $(\"Build offer.v1 payload\").first().json.count;\nreturn [{ json: { ok: true, source: \"jarir\", offers: count, pushedToIngest: true, at: new Date().toISOString() } }];"
+        "jsCode": "const p = $('Build offer.v1 payload').first().json.payload;\nconst s = (p.sources && p.sources[0]) || {};\nreturn [{ json: { timestamp: p.generatedAt, source: s.id || '', offers: s.count || 0, status: s.status || '', generator: p.generator } }];"
+      },
+      "id": "jr-10-row",
+      "name": "Run row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 220]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "PASTE_SPREADSHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "runs", "mode": "name" },
+        "columns": { "mappingMode": "autoMapInputData", "value": {}, "matchingColumns": [] },
+        "options": {}
+      },
+      "id": "jr-11-sheets",
+      "name": "Log run to sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1780, 220],
+      "continueOnFail": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "REPLACE_AFTER_IMPORT", "name": "onlydeals-sheets-sa" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const count = $(\"Build offer.v1 payload\").first().json.count;\nreturn [{ json: { ok: true, source: \"jarir\", offers: count, pushedToIngest: true, loggedToSheet: true, at: new Date().toISOString() } }];"
       },
       "id": "jr-07-summary",
       "name": "Summary (webhook reply)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1560, 220]
+      "position": [2000, 220]
     },
     {
       "parameters": {
@@ -122,7 +150,9 @@
         [{ "node": "Empty result (webhook reply)", "type": "main", "index": 0 }]
       ]
     },
-    "POST to ingest": { "main": [[{ "node": "Summary (webhook reply)", "type": "main", "index": 0 }]] }
+    "POST to ingest": { "main": [[{ "node": "Run row", "type": "main", "index": 0 }]] },
+    "Run row": { "main": [[{ "node": "Log run to sheet", "type": "main", "index": 0 }]] },
+    "Log run to sheet": { "main": [[{ "node": "Summary (webhook reply)", "type": "main", "index": 0 }]] }
   },
   "settings": { "executionOrder": "v1" },
   "pinData": {},

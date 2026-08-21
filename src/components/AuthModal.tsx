@@ -51,7 +51,6 @@ export default function AuthModal({ open, intent, onClose, onAuthed }: Props) {
     if (busy) return;
     setBusy(true);
     setError(null);
-    // tiny beat so the button state is perceptible
     window.setTimeout(() => {
       const res =
         mode === "login"
@@ -96,15 +95,12 @@ export default function AuthModal({ open, intent, onClose, onAuthed }: Props) {
 
         <div className="flex items-center gap-3">
           <BrandMark className="h-9 w-9" />
-          <div>
-            <h2 className="font-display text-[21px] font-extrabold tracking-tight text-ink">
-              {copy.title}
-            </h2>
-          </div>
+          <h2 className="font-display text-[21px] font-extrabold tracking-tight text-ink">
+            {copy.title}
+          </h2>
         </div>
         <p className="mt-2 text-[13px] leading-relaxed text-ink-soft">{copy.sub}</p>
 
-        {/* tabs */}
         <div className="mt-4 grid grid-cols-2 gap-1 rounded-lg border border-line bg-paper p-1">
           {(
             [

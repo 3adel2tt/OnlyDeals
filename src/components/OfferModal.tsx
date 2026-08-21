@@ -15,11 +15,11 @@ import {
 interface Props {
   offer: Offer;
   scrapedAt: number | null;
-  live: boolean;
+  generator: string;
   cardFollowed: boolean;
   vendorFollowed: boolean;
-  onToggleCard: (offer: Offer) => void;
-  onToggleVendor: (offer: Offer) => void;
+  onToggleCard: (o: Offer) => void;
+  onToggleVendor: (o: Offer) => void;
   onClose: () => void;
   onToast: (msg: string) => void;
 }
@@ -34,7 +34,7 @@ const TONE_TEXT: Record<string, string> = {
 export default function OfferModal({
   offer,
   scrapedAt,
-  live,
+  generator,
   cardFollowed,
   vendorFollowed,
   onToggleCard,
@@ -80,7 +80,7 @@ export default function OfferModal({
 
         <div className="grid md:grid-cols-[1.05fr_1fr]">
           {/* image side */}
-          <div className="relative h-52 sm:h-64 md:h-auto md:min-h-[480px]">
+          <div className="relative h-52 sm:h-64 md:h-auto md:min-h-[500px]">
             {offer.image ? (
               <img src={offer.image} alt={offer.merchant} className="absolute inset-0 h-full w-full object-cover" />
             ) : (
@@ -205,7 +205,7 @@ export default function OfferModal({
               </a>
             </div>
             <p className="mt-2.5 text-center font-mono text-[9.5px] tracking-[0.1em] text-ink-faint">
-              {live ? "PARSED LIVE" : "SNAPSHOT"} · SCRAPED {scrapedAt ? timeAgo(scrapedAt).toUpperCase() : "—"}
+              {generator.toUpperCase()} · SYNCED {scrapedAt ? timeAgo(scrapedAt).toUpperCase() : "—"}
             </p>
           </div>
         </div>
