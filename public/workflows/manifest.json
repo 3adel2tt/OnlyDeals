@@ -18,6 +18,14 @@
       "description": "Jarir offers page, percent + 0%-installments patterns, same offer.v1 payload + Sheets audit row."
     },
     {
+      "id": "alinma",
+      "name": "Source · Alinma Bank",
+      "type": "source",
+      "file": "onlydeals-alinma.workflow.json",
+      "webhook": "onlydeals-alinma",
+      "description": "Detail-page scrape of alinma.com Media-Campaigns: per-card list → per-offer page → discount/date/terms parsing → offer.v1 → ingest + Sheets audit row."
+    },
+    {
       "id": "master-scheduler",
       "name": "Master scheduler",
       "type": "scheduler",

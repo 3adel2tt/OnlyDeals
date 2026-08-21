@@ -15,7 +15,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// PLUG-AND-PLAY SOURCE REGISTRY\n// Adding a source = deploy its workflow (webhook onlydeals-<id>) + add ONE line here.\nconst base = ($env.ONLYDEALS_N8N_BASE || \"https://n8n.example.com\").replace(/\\/+$/, \"\");\nconst sources = [\n  { id: \"alrajhi\", name: \"Al Rajhi Bank\", trigger: base + \"/webhook/onlydeals-alrajhi\" },\n  { id: \"jarir\",   name: \"Jarir\",         trigger: base + \"/webhook/onlydeals-jarir\" }\n];\nreturn sources.map(s => ({ json: s }));"
+        "jsCode": "// PLUG-AND-PLAY SOURCE REGISTRY\n// Adding a source = deploy its workflow (webhook onlydeals-<id>) + add ONE line here.\nconst base = ($env.OFFRADAR_N8N_BASE || \"https://n8n.example.com\").replace(/\\/+$/, \"\");\nconst sources = [\n  { id: \"alrajhi\", name: \"Al Rajhi Bank\", trigger: base + \"/webhook/onlydeals-alrajhi\" },\n  { id: \"jarir\",   name: \"Jarir\",         trigger: base + \"/webhook/onlydeals-jarir\" },\n  { id: \"alinma\",  name: \"Alinma Bank\",   trigger: base + \"/webhook/onlydeals-alinma\" }\n];\nreturn sources.map(s => ({ json: s }));"
       },
       "id": "ms-02-registry",
       "name": "Source registry",
@@ -83,10 +83,10 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ONLYDEALS_STATUS_URL }}",
+        "url": "={{ $env.OFFRADAR_STATUS_URL }}",
         "sendHeaders": true,
         "headerParameters": {
-          "parameters": [{ "name": "x-api-key", "value": "={{ $env.ONLYDEALS_API_KEY }}" }]
+          "parameters": [{ "name": "x-api-key", "value": "={{ $env.OFFRADAR_API_KEY }}" }]
         },
         "sendBody": true,
         "specifyBody": "json",

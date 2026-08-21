@@ -74,10 +74,10 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.ONLYDEALS_INGEST_URL }}",
+        "url": "={{ $env.OFFRADAR_INGEST_URL }}",
         "sendHeaders": true,
         "headerParameters": {
-          "parameters": [{ "name": "x-api-key", "value": "={{ $env.ONLYDEALS_API_KEY }}" }]
+          "parameters": [{ "name": "x-api-key", "value": "={{ $env.OFFRADAR_API_KEY }}" }]
         },
         "sendBody": true,
         "specifyBody": "json",

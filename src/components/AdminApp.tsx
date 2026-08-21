@@ -88,8 +88,8 @@ function discoveredFromFeed(): string[] {
   return Array.from(ids);
 }
 
-const INGEST_CONTRACT = `POST  {{ ONLYDEALS_INGEST_URL }}
-HEAD  x-api-key: {{ ONLYDEALS_API_KEY }}
+const INGEST_CONTRACT = `POST  {{ OFFRADAR_INGEST_URL }}
+HEAD  x-api-key: {{ OFFRADAR_API_KEY }}
 
 {
   "version": "offer.v1",
@@ -698,9 +698,10 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
                   <ol className="list-decimal space-y-1 pl-5 font-mono text-[11px] leading-relaxed text-[#8f766f]">
                     <li>Import all three into your n8n instance (Workflows → Import from file).</li>
                     <li>
-                      Set env vars: <code className="text-flare">ONLYDEALS_INGEST_URL</code>,{" "}
-                      <code className="text-flare">ONLYDEALS_API_KEY</code>,{" "}
-                      <code className="text-flare">ONLYDEALS_N8N_BASE</code>.
+                      Set env vars: <code className="text-flare">OFFRADAR_INGEST_URL</code>,{" "}
+                      <code className="text-flare">OFFRADAR_API_KEY</code>,{" "}
+                      <code className="text-flare">OFFRADAR_N8N_BASE</code> (see{" "}
+                      <code className="text-flare">deploy/DEPLOY.md</code>).
                     </li>
                     <li>Activate the master scheduler — it becomes the heartbeat.</li>
                     <li>
