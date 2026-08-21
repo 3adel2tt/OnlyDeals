@@ -27,7 +27,7 @@ import Ticker from "./components/Ticker";
 import Terminal from "./components/Terminal";
 import OfferTile from "./components/OfferTile";
 import OfferModal from "./components/OfferModal";
-import SourcesLedger from "./components/SourcesLedger";
+
 import BrowseDrawer from "./components/BrowseDrawer";
 import AuthModal from "./components/AuthModal";
 import Footer from "./components/Footer";
@@ -331,7 +331,7 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
   }, [follows, user, showToast]);
 
   const offers = payload?.offers ?? [];
-  const outcomes = payload?.sources ?? [];
+
   const generator = payload?.generator ?? "—";
   const done = feedStatus === "done";
 
@@ -627,6 +627,22 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
                 </button>
               </div>
             </div>
+          ) : done && offers.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-line bg-card/60 px-6 py-16 text-center">
+              <TagEmpty />
+              <p className="font-display text-xl font-bold text-ink">Waiting for first n8n sync</p>
+              <p className="max-w-sm text-[13px] leading-relaxed text-ink-soft">
+                The board only shows real offers produced by the n8n pipeline. Run a source
+                workflow (or the master scheduler) so it writes to Postgres, then hit
+                “Sync feed” to pull it in.
+              </p>
+              <button
+                onClick={syncPass}
+                className="mt-1 rounded-full bg-ink px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-paper transition-colors hover:bg-brick"
+              >
+                Sync feed now
+              </button>
+            </div>
           ) : done && scoped.length === 0 ? (
             <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-line bg-card/60 px-6 py-16 text-center">
               <TagEmpty />
@@ -695,11 +711,6 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
           )}
         </section>
 
-        <SourcesLedger
-          outcomes={outcomes}
-          custom={customSources}
-          onPick={(name: string) => showToast(`${name} is queued — register it from the control room`)}
-        />
       </main>
 
       <Footer />

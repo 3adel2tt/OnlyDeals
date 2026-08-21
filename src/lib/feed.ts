@@ -1,14 +1,16 @@
-import type { FeedPayload, FeedProvenance, Offer, SourceOutcome } from "../types";
-import { alrajhiSnapshot } from "../data/alrajhiSnapshot";
+import type { FeedPayload, FeedProvenance, Offer } from "../types";
 
 /**
  * Feed reader — the ONLY way offers enter the public site.
  *
  * Resolution order:
- *   1. FEED_URL — the merged onlydeals.json your ingest service publishes
- *      (set this to your server URL, e.g. https://offers.example.com/onlydeals.json)
+ *   1. FEED_URL — the DB-backed feed served by the feed service
+ *      (set this to e.g. https://deals.your-domain.com/onlydeals.json)
  *   2. local ingest store — what the control room's "push test" wrote (demo path)
- *   3. bundled seed — shipped with the app so the board is never empty
+ *   3. nothing — the board shows an honest "waiting for first n8n sync" state.
+ *
+ * There is deliberately NO bundled seed: the board only ever shows real
+ * offers produced by the n8n pipeline.
  */
 
 export const FEED_URL: string | null = null;
@@ -33,68 +35,64 @@ function looksLikePayload(x: unknown): x is FeedPayload {
   );
 }
 
-/** The bundled seed presented in feed shape. */
-export function bundledFeed(): FeedPayload {
-  const offers = alrajhiSnapshot();
-  const sources: SourceOutcome[] = [
-    {
-      id: "alrajhi",
-      name: "Al Rajhi Bank",
-      status: "snapshot",
-      count: offers.length,
-      note: "bundled seed · awaiting first n8n sync",
-      at: Date.now(),
-    },
-    {
-      id: "jarir",
-      name: "Jarir",
-      status: "queued",
-      count: 0,
-      note: "workflow ready · not run yet",
-      at: Date.now(),
-    },
-  ];
+/** An honest empty feed — no bundled offers. */
+function emptyFeed(): FeedPayload {
   return {
     version: "offer.v1",
     generatedAt: new Date().toISOString(),
-    generator: "bundled-seed",
-    sources,
-    offers,
+    generator: "none",
+    sources: [],
+    offers: [],
   };
 }
 
 /** Payload the control room pushes to simulate the ingest endpoint. */
 export function testPushPayload(): FeedPayload {
-  const seed = bundledFeed();
   const now = new Date();
-  const offers: Offer[] = seed.offers.map((o) => ({ ...o }));
-  offers.push({
-    id: "jarir-push-1",
-    merchant: "Jarir",
-    headline: "0% installments for 12 months — pushed from the control room",
-    discountLabel: "0% ×12",
-    value: 12,
-    kind: "installments",
-    category: "electronics",
-    bank: "Jarir",
-    card: "All bank cards",
-    image: "",
-    cards: ["All bank cards"],
-    link: "https://www.jarir.com/sa-en/offers",
-    expiresAt: new Date(now.getTime() + 20 * 86_400_000).toISOString(),
-    terms: ["Pushed via the control room to simulate an n8n ingest."],
-  });
+  const offers: Offer[] = [
+    {
+      id: "test-push-1",
+      merchant: "Acme Coffee",
+      headline: "Buy one get one free — pushed from the control room to test the board",
+      discountLabel: "1+1 FREE",
+      value: 50,
+      kind: "bogo",
+      category: "coffee",
+      bank: "Test Bank",
+      card: "Test Card",
+      image: "",
+      cards: ["Test Card"],
+      link: "#",
+      expiresAt: new Date(now.getTime() + 14 * 86_400_000).toISOString(),
+      terms: ["Pushed via the control room to simulate an n8n ingest."],
+    },
+    {
+      id: "test-push-2",
+      merchant: "Acme Electronics",
+      headline: "15% off — a second sample so the grid has something to lay out",
+      discountLabel: "−15%",
+      value: 15,
+      kind: "percent",
+      category: "electronics",
+      bank: "Test Bank",
+      card: "Test Card",
+      image: "",
+      cards: ["Test Card"],
+      link: "#",
+      expiresAt: new Date(now.getTime() + 30 * 86_400_000).toISOString(),
+      terms: ["Pushed via the control room to simulate an n8n ingest."],
+    },
+  ];
   return {
     version: "offer.v1",
     generatedAt: now.toISOString(),
     generator: "n8n:onlydeals-test",
     sources: [
-      ...seed.sources.map((s) => ({ ...s })),
       {
         id: "test-push",
         name: "Control-room push",
         status: "live",
-        count: 1,
+        count: offers.length,
         note: "simulated ingest payload",
         at: now.getTime(),
       },
@@ -152,11 +150,11 @@ export async function loadFeed(): Promise<FeedResult> {
   const local = readLocalFeed();
   if (local) return { payload: local, provenance: "local", fetchedAt: Date.now() };
 
-  return { payload: bundledFeed(), provenance: "bundled", fetchedAt: Date.now() };
+  return { payload: emptyFeed(), provenance: "bundled", fetchedAt: Date.now() };
 }
 
 export const PROVENANCE_NOTE: Record<FeedProvenance, string> = {
-  remote: "live feed · pulled from the n8n ingest",
+  remote: "live feed · pulled from the DB-backed n8n feed",
   local: "local ingest store · pushed from the control room",
-  bundled: "bundled seed · connect the n8n feed to go live",
+  bundled: "no feed yet · waiting for first n8n sync",
 };
