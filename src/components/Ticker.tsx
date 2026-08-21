@@ -24,7 +24,7 @@ export default function Ticker({ offers }: { offers: Offer[] }) {
   );
 
   return (
-    <div className="marquee overflow-hidden border-b border-term-line bg-term py-2 text-paper" aria-hidden="true">
+    <div className="marquee overflow-hidden border-b border-term-line bg-term py-2 text-ink" aria-hidden="true">
       <div className="marquee-track font-mono text-[11px] tracking-[0.12em]">
         <div className="flex">{half}</div>
         <div className="flex">{half}</div>

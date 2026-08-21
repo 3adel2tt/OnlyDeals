@@ -13,10 +13,10 @@ interface Props {
 }
 
 const BADGE: Record<string, string> = {
-  hot: "bg-ember text-[#fff6f1]",
-  warm: "bg-amber text-ink",
-  ok: "bg-term/75 text-paper",
-  open: "border border-dashed border-paper/60 bg-term/45 text-paper",
+  hot: "bg-ember text-card",
+  warm: "bg-amber text-card",
+  ok: "bg-scrim/80 text-scrim-ink",
+  open: "border border-dashed border-scrim-ink/60 bg-scrim/50 text-scrim-ink",
 };
 
 const STAMP: Record<Offer["kind"], string> = {
@@ -64,7 +64,7 @@ export default function OfferTile({ offer, index, followed, onOpen, onToggleFoll
               {offer.merchant.slice(0, 2).toUpperCase()}
             </div>
           )}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-term/45 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-scrim/55 to-transparent" />
 
           {/* follow star */}
           <button
@@ -76,8 +76,8 @@ export default function OfferTile({ offer, index, followed, onOpen, onToggleFoll
             aria-label={followed ? "Unfollow card tier" : "Follow card tier"}
             className={`absolute left-2.5 top-2.5 flex h-8 w-8 items-center justify-center rounded-full backdrop-blur transition-all active:scale-90 ${
               followed
-                ? "star-pop bg-amber text-ink shadow-[0_3px_10px_-2px_rgba(232,185,62,0.8)]"
-                : "bg-term/50 text-paper hover:bg-amber hover:text-ink"
+                ? "star-pop bg-amber text-card shadow-[0_3px_10px_-2px_rgba(232,185,62,0.8)]"
+                : "bg-scrim/55 text-scrim-ink hover:bg-amber hover:text-card"
             }`}
           >
             <StarIcon filled={followed} className="h-4 w-4" />

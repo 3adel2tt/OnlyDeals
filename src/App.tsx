@@ -5,15 +5,13 @@ import type {
   CustomSource,
   FeedPayload,
   FeedProvenance,
-  FeedStatus,
-  LogLine,
   Offer,
   User,
 } from "./types";
 import { CATEGORY_LABEL } from "./types";
-import { FEED_URL, PROVENANCE_NOTE, loadFeed } from "./lib/feed";
-import { daysLeft, formatClock } from "./lib/format";
-import { ensureSeeded, getSession, logout } from "./lib/auth";
+import { loadFeed, PROVENANCE_NOTE } from "./lib/feed";
+import { daysLeft } from "./lib/format";
+import { apiLogout, apiMe } from "./lib/api";
 import {
   cardKey,
   getFollows,
@@ -24,45 +22,38 @@ import {
 import AdminApp from "./components/AdminApp";
 import TopBar from "./components/TopBar";
 import Ticker from "./components/Ticker";
-import Terminal from "./components/Terminal";
 import OfferTile from "./components/OfferTile";
 import OfferModal from "./components/OfferModal";
-
+import SourcesLedger from "./components/SourcesLedger";
 import BrowseDrawer from "./components/BrowseDrawer";
 import AuthModal from "./components/AuthModal";
 import Footer from "./components/Footer";
-import {
-  BankIcon,
-  CheckIcon,
-  CloseIcon,
-  SearchIcon,
-  StarIcon,
-  StoreIcon,
-} from "./components/icons";
+import Paginator, { type ViewMode } from "./components/Paginator";
+import { BankIcon, CheckIcon, CloseIcon, SearchIcon, StarIcon, StoreIcon } from "./components/icons";
 
 type SortKey = "expiring" | "value" | "recent";
 
 const REGISTRY_KEY = "onlydeals.registry.v1";
 const THEME_KEY = "onlydeals.theme";
+const VIEW_KEY = "onlydeals.view";
+const PAGESIZE_KEY = "onlydeals.pagesize";
+const FEED_INTERVAL_MS = 5 * 60 * 1000;
 
 function isAdminRoute(): boolean {
   const path = window.location.pathname.replace(/\/+$/, "");
   return path.endsWith("/adminn") || window.location.hash.includes("adminn");
 }
 
-/** Base the app is served under, so /adminn works from any mount point. */
 function basePath(): string {
   return window.location.pathname.replace(/adminn\/?$/, "");
 }
 
 function initialTheme(): "light" | "dark" {
   try {
-    const t = localStorage.getItem(THEME_KEY);
-    if (t === "dark" || t === "light") return t;
+    return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
   } catch {
-    /* ignore */
+    return "dark";
   }
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
 function loadRegistry(): CustomSource[] {
@@ -73,8 +64,6 @@ function loadRegistry(): CustomSource[] {
     return [];
   }
 }
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function SkeletonTile() {
   return (
@@ -107,7 +96,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", theme === "dark");
+    document.documentElement.classList.toggle("light", theme === "light");
+    document.documentElement.style.colorScheme = theme;
     try {
       localStorage.setItem(THEME_KEY, theme);
     } catch {
@@ -141,10 +131,8 @@ export default function App() {
 
 function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTheme: () => void }) {
   const [payload, setPayload] = useState<FeedPayload | null>(null);
-  const [feedStatus, setFeedStatus] = useState<FeedStatus>("idle");
   const [provenance, setProvenance] = useState<FeedProvenance | null>(null);
   const [lastSync, setLastSync] = useState<number | null>(null);
-  const [logs, setLogs] = useState<LogLine[]>([]);
   const [selected, setSelected] = useState<Offer | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -159,12 +147,28 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
   const [authOpen, setAuthOpen] = useState(false);
   const [authIntent, setAuthIntent] = useState<"generic" | "follow">("generic");
 
-  const logId = useRef(0);
-  const syncing = useRef(false);
-  const started = useRef(false);
-  const followsLoadedRef = useRef(false);
+  // pagination / view mode (persisted)
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    try {
+      return localStorage.getItem(VIEW_KEY) === "infinite" ? "infinite" : "pages";
+    } catch {
+      return "pages";
+    }
+  });
+  const [pageSize, setPageSize] = useState<number>(() => {
+    try {
+      const n = Number(localStorage.getItem(PAGESIZE_KEY));
+      return n === 24 || n === 48 || n === 96 ? n : 24;
+    } catch {
+      return 24;
+    }
+  });
+  const [page, setPage] = useState(1);
+  const [loaded, setLoaded] = useState(pageSize);
+
   const toastTimer = useRef<number | undefined>(undefined);
   const searchRef = useRef<HTMLInputElement>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -172,65 +176,73 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
     toastTimer.current = window.setTimeout(() => setToast(null), 2600);
   }, []);
 
-  const syncPass = useCallback(async () => {
-    if (syncing.current) return;
-    syncing.current = true;
-    setFeedStatus("syncing");
-    setLogs([]);
-    const log = (kind: LogLine["kind"], text: string) =>
-      setLogs((prev) => [...prev, { id: ++logId.current, time: formatClock(Date.now()), kind, text }]);
-
-    log("sys", "onlydeals v0.5 · feed sync start");
-    if (FEED_URL) log("info", `GET ${FEED_URL}`);
-    else log("warn", "FEED_URL not configured (src/lib/feed.ts) — checking local ingest store");
-    await sleep(420);
-
+  /* ---------- feed: read on load + every 5 minutes (no manual sync) ---------- */
+  const refresh = useCallback(async (silent: boolean) => {
     const res = await loadFeed();
-    if (res.provenance === "remote") log("ok", `remote feed received · generator ${res.payload.generator}`);
-    else if (res.provenance === "local") log("ok", `local ingest store hit · generator ${res.payload.generator}`);
-    else log("warn", "no feed found — serving bundled seed data");
-
-    for (const s of res.payload.sources) {
-      log(
-        s.status === "error" ? "err" : s.status === "live" ? "ok" : "info",
-        `${s.id} · ${s.status} · ${s.count} offers — ${s.note}`,
-      );
-    }
-    log("sys", `sync complete — ${res.payload.offers.length} offers on the board (${res.provenance})`);
-
     setPayload(res.payload);
     setProvenance(res.provenance);
     setLastSync(res.fetchedAt);
-    setFeedStatus("done");
-    syncing.current = false;
-    showToast(`Feed synced — ${res.payload.offers.length} offers`);
+    if (!silent) showToast(`Feed loaded — ${res.payload.offers.length} offers`);
   }, [showToast]);
 
   useEffect(() => {
-    if (started.current) return;
-    started.current = true;
-    syncPass();
-  }, [syncPass]);
+    void refresh(false);
+    const t = window.setInterval(() => void refresh(true), FEED_INTERVAL_MS);
+    return () => window.clearInterval(t);
+  }, [refresh]);
 
-  // restore session + follows on mount (kick out any lingering admin session)
+  /* ---------- session restore (server cookie) ---------- */
   useEffect(() => {
-    ensureSeeded();
-    const u = getSession();
-    if (u) {
-      if (u.role === "admin") {
-        logout();
-        return;
+    void apiMe().then((u) => {
+      if (u) {
+        setUser(u);
+        setFollows(getFollows(u.id));
       }
-      setUser(u);
-      setFollows(getFollows(u.id));
-    }
+    });
   }, []);
 
-  // "/" focuses search
+  /* ---------- auth ---------- */
+  const openAuth = (intent: "generic" | "follow") => {
+    setAuthIntent(intent);
+    setAuthOpen(true);
+  };
+
+  const handleAuthed = (u: User) => {
+    setUser(u);
+    setFollows(getFollows(u.id));
+    setAuthOpen(false);
+    showToast(`Welcome, ${u.displayName || u.email}`);
+  };
+
+  const handleLogout = async () => {
+    await apiLogout();
+    setUser(null);
+    setFollows([]);
+    setView("all");
+    showToast("Signed out — see you soon");
+  };
+
+  /* ---------- follows ---------- */
+  const toggleCard = (bank: string, card: string) => {
+    if (!user) return openAuth("follow");
+    const key = cardKey(bank, card);
+    const next = toggleFollow(user.id, key);
+    setFollows(next);
+    showToast(next.includes(key) ? `Following ${card}` : `Unfollowed ${card}`);
+  };
+
+  const toggleVendor = (merchant: string) => {
+    if (!user) return openAuth("follow");
+    const key = vendorKey(merchant);
+    const next = toggleFollow(user.id, key);
+    setFollows(next);
+    showToast(next.includes(key) ? `Following ${merchant}` : `Unfollowed ${merchant}`);
+  };
+
+  /* ---------- keyboard: "/" focuses search ---------- */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const tag = (document.activeElement as HTMLElement)?.tagName;
-      if (e.key === "/" && tag !== "INPUT" && tag !== "TEXTAREA") {
+      if (e.key === "/" && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
         e.preventDefault();
         searchRef.current?.focus();
       }
@@ -238,6 +250,9 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  /* ---------- derived data ---------- */
+  const offers = useMemo(() => payload?.offers ?? [], [payload]);
 
   const applyScope = useCallback((next: BrowseScope) => {
     setScope(next);
@@ -249,106 +264,14 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
     }, 60);
   }, []);
 
-  // ---- auth ----
-  const openAuth = useCallback((intent: "generic" | "follow" = "generic") => {
-    setAuthIntent(intent);
-    setAuthOpen(true);
-  }, []);
-
-  const handleAuthed = useCallback(
-    (u: User) => {
-      setUser(u);
-      setFollows(getFollows(u.id));
-      setAuthOpen(false);
-      showToast(`Signed in as ${u.displayName}`);
-    },
-    [showToast],
-  );
-
-  const handleLogout = useCallback(() => {
-    logout();
-    setUser(null);
-    setFollows([]);
-    setView("all");
-    showToast("Signed out — back to the public board");
-  }, [showToast]);
-
-  // ---- follows ----
-  const requireAuthThen = useCallback(
-    (fn: () => void, label: string) => {
-      if (!user) {
-        showToast(`Sign in to follow ${label}`);
-        openAuth("follow");
-        return;
-      }
-      fn();
-    },
-    [user, openAuth, showToast],
-  );
-
-  const toggleCard = useCallback(
-    (bank: string, card: string) => {
-      requireAuthThen(() => {
-        if (!user) return;
-        const next = toggleFollow(user.id, cardKey(bank, card));
-        setFollows(next);
-      }, card);
-    },
-    [user, requireAuthThen],
-  );
-
-  const toggleVendor = useCallback(
-    (merchant: string) => {
-      requireAuthThen(() => {
-        if (!user) return;
-        const next = toggleFollow(user.id, vendorKey(merchant));
-        setFollows(next);
-      }, merchant);
-    },
-    [user, requireAuthThen],
-  );
-
-  const toggleView = useCallback(() => {
-    if (!user) {
-      openAuth("follow");
-      return;
-    }
-    setView((v) => (v === "all" ? "my" : "all"));
-  }, [user, openAuth]);
-
-  // follow state changed → toast the most recent action (skip first load)
-  useEffect(() => {
-    if (!user) return;
-    const count = follows.length;
-    if (followsLoadedRef.current) {
-      showToast(
-        count === 0
-          ? "Deals list cleared — nothing followed"
-          : `Following ${count} ${count === 1 ? "source" : "sources"}`,
-      );
-    }
-    followsLoadedRef.current = true;
-  }, [follows, user, showToast]);
-
-  const offers = payload?.offers ?? [];
-
-  const generator = payload?.generator ?? "—";
-  const done = feedStatus === "done";
-
-  // ---- my-deals pool: followed offers only ----
-  const pool = useMemo(() => {
-    if (view !== "my" || !user) return offers;
-    return offers.filter((o) => offerFollowed(o, follows));
-  }, [offers, view, user, follows]);
-
-  // offers narrowed by the drawer's bank→card / vendor drill-down
   const scoped = useMemo(() => {
-    if (scope.type === "bank") return pool.filter((o) => o.bank === scope.bank);
-    if (scope.type === "bank-card")
-      return pool.filter((o) => o.bank === scope.bank && o.card === scope.card);
-    if (scope.type === "vendor") return pool.filter((o) => o.merchant === scope.vendor);
-    return pool;
-  }, [pool, scope]);
+    let list = offers;
+    if (view === "my") list = list.filter((o) => offerFollowed(o, follows));
+    if (scope.type === "bank") list = list.filter((o) => o.bank === scope.bank);
+    if (scope.type === "bank-card") list = list.filter((o) => o.bank === scope.bank && o.card === scope.card);
+    if (scope.type === "vendor") list = list.filter((o) => o.merchant === scope.vendor);
+    return list;
+  }, [offers, view, follows, scope]);
 
   const categories = useMemo(
     () => Array.from(new Set(scoped.map((o) => o.category))).sort(),
@@ -370,8 +293,44 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
     const byExpiry = (o: Offer) => (o.expiresAt ? Date.parse(o.expiresAt) : Number.MAX_SAFE_INTEGER);
     if (sort === "expiring") return [...filtered].sort((a, b) => byExpiry(a) - byExpiry(b));
     if (sort === "value") return [...filtered].sort((a, b) => b.value - a.value);
+    if (sort === "recent") return [...filtered].sort((a, b) => b.id.localeCompare(a.id));
     return filtered;
   }, [scoped, search, category, sort]);
+
+  /* ---------- pagination math ---------- */
+  const scopeKey = JSON.stringify(scope);
+  useEffect(() => {
+    setPage(1);
+    setLoaded(pageSize);
+  }, [search, category, sort, scopeKey, view, pageSize, visible.length]);
+
+  const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
+  const clampedPage = Math.min(page, totalPages);
+
+  const pageItems = useMemo(
+    () =>
+      viewMode === "pages"
+        ? visible.slice((clampedPage - 1) * pageSize, clampedPage * pageSize)
+        : visible.slice(0, loaded),
+    [viewMode, visible, clampedPage, pageSize, loaded],
+  );
+
+  /* infinite-scroll sentinel */
+  useEffect(() => {
+    if (viewMode !== "infinite") return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setLoaded((l) => Math.min(l + pageSize, visible.length));
+        }
+      },
+      { rootMargin: "600px 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [viewMode, pageSize, visible.length]);
 
   const stats = useMemo(() => {
     const best = scoped.length
@@ -392,117 +351,146 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
           ? scope.vendor
           : "";
 
-  const filtering = search.trim() !== "" || category !== "all" || scope.type !== "all";
+  const done = payload !== null;
 
   return (
     <div id="top" className="min-h-screen">
       <TopBar
-        feedStatus={feedStatus}
         provenance={provenance}
         lastSync={lastSync}
         theme={theme}
-        onSync={syncPass}
-        onBrowse={() => setDrawerOpen(true)}
         onToggleTheme={onToggleTheme}
+        onBrowse={() => setDrawerOpen(true)}
         user={user}
         view={view}
         followCount={follows.length}
-        onToggleView={toggleView}
+        onToggleView={() => {
+          if (!user) return openAuth("follow");
+          setView((v) => (v === "my" ? "all" : "my"));
+        }}
         onSignIn={() => openAuth("generic")}
-        onLogout={handleLogout}
+        onLogout={() => void handleLogout()}
       />
       <Ticker offers={offers} />
 
       <main className="mx-auto max-w-7xl px-4 sm:px-6">
-        {/* intro + feed log */}
-        <section className="grid gap-6 pt-8 sm:pt-12 lg:grid-cols-[1.15fr_1fr] lg:items-end">
-          <div>
+        {/* intro + live engine status */}
+        <section className="grid gap-6 pt-8 sm:pt-12 lg:grid-cols-[1.2fr_1fr] lg:items-end">
+          <div className="reveal is-in">
             <p className="flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.22em] text-brick">
               <span className="inline-block h-2 w-2 bg-brick" />
-              feed-driven board · engines on n8n
+              sources 01–02 · n8n engines · alrajhi + jarir
             </p>
-            <h1 className="mt-3 font-display text-[42px] font-extrabold leading-[1.02] tracking-tight text-ink sm:text-[58px]">
-              Every card deal,
-              <br />
-              one <span className="text-brick">board.</span>
+            <h1 className="mt-4 font-display text-[42px] font-extrabold leading-[0.98] tracking-tight text-ink sm:text-[58px]">
+              {view === "my" ? (
+                <>
+                  Your deals,
+                  <br />
+                  <span className="text-brick">on one board.</span>
+                </>
+              ) : (
+                <>
+                  Every card offer,
+                  <br />
+                  <span className="text-brick">scraped & sorted.</span>
+                </>
+              )}
             </h1>
-            <p className="mt-4 max-w-lg text-[15px] leading-relaxed text-ink-soft">
-              onlydeals reads what your n8n workflows produce — Al Rajhi, Jarir, and whatever
-              you plug in next. Follow a card tier or a merchant and keep{" "}
-              <button
-                onClick={toggleView}
-                className="font-semibold text-brick underline decoration-brick/40 underline-offset-4 transition-colors hover:decoration-brick"
-              >
-                your own deals list
-              </button>
-              .
+            <p className="mt-4 max-w-md text-[14px] leading-relaxed text-ink-soft">
+              n8n workflows crawl bank and merchant offer pages on your server; this board
+              reads the feed every five minutes. Follow the cards you own or the merchants
+              you love — your list lives under <span className="font-semibold text-ink">My deals</span>.
             </p>
+          </div>
+
+          {/* engine strip — read-only status from the feed */}
+          <div className="reveal is-in overflow-hidden rounded-xl border border-line bg-card" style={{ transitionDelay: "80ms" }}>
+            <p className="border-b border-line px-4 py-2.5 font-mono text-[9.5px] uppercase tracking-[0.2em] text-ink-faint">
+              engine status · last feed
+            </p>
+            <div className="divide-y divide-line">
+              {(payload?.sources ?? []).map((s) => (
+                <div key={s.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <span
+                    className={`relative inline-block h-2 w-2 shrink-0 rounded-full ${
+                      s.status === "live"
+                        ? "bg-live text-live ping-dot"
+                        : s.status === "error"
+                          ? "bg-ember text-ember"
+                          : "bg-amber text-amber"
+                    }`}
+                  />
+                  <span className="font-display text-[14px] font-bold tracking-tight text-ink">{s.name}</span>
+                  <span className="num-tabular ml-auto font-mono text-[10.5px] text-ink-soft">
+                    {s.count} offer{s.count === 1 ? "" : "s"}
+                  </span>
+                  <span
+                    className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] ${
+                      s.status === "live"
+                        ? "border-live/40 bg-live/10 text-live"
+                        : s.status === "error"
+                          ? "border-ember/40 bg-ember-soft text-ember"
+                          : "border-amber/40 bg-amber-soft text-amber"
+                    }`}
+                  >
+                    {s.status}
+                  </span>
+                </div>
+              ))}
+              {!done && (
+                <div className="px-4 py-3 font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-faint">
+                  reading /onlydeals.json…
+                </div>
+              )}
+            </div>
             {provenance && (
-              <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+              <p className="border-t border-line px-4 py-2 font-mono text-[9.5px] tracking-[0.1em] text-ink-faint">
                 {PROVENANCE_NOTE[provenance]}
               </p>
             )}
           </div>
-          <Terminal logs={logs} status={feedStatus} />
         </section>
 
         {/* stats strip */}
-        <section className="mt-8 grid grid-cols-1 divide-y divide-line overflow-hidden rounded-xl border border-line bg-card sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        <section className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {[
             {
-              label: view === "my" ? "offers you follow" : "offers on the board",
-              value: done ? String(stats.count) : "··",
-              sub: generator,
+              k: view === "my" ? "followed offers" : "offers on board",
+              v: done ? String(stats.count) : "…",
+              sub: done && provenance ? PROVENANCE_NOTE[provenance] : "loading feed",
               hot: false,
             },
             {
-              label: "best discount",
-              value: done && stats.best ? stats.best.discountLabel : "··",
-              sub: stats.best ? stats.best.merchant.toLowerCase() : "—",
-              hot: false,
+              k: "best discount",
+              v: stats.best ? stats.best.discountLabel : "—",
+              sub: stats.best ? stats.best.merchant : "",
+              hot: true,
             },
             {
-              label: "expiring ≤ 7 days",
-              value: done ? String(stats.expiring) : "··",
-              sub: "act on these first",
-              hot: stats.expiring > 0,
+              k: "expiring ≤ 7 days",
+              v: String(stats.expiring),
+              sub: "move fast on these",
+              hot: false,
             },
           ].map((s, i) => (
-            <div key={i} className="flex-1 bg-card px-5 py-4 transition-colors hover:bg-tint/50">
-              <p className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-ink-faint">{s.label}</p>
-              <p
-                className={`num-tabular mt-1 font-display text-[30px] font-extrabold leading-none tracking-tight ${
-                  s.hot ? "text-ember" : "text-ink"
-                }`}
-              >
-                {s.value}
+            <div
+              key={s.k}
+              className={`reveal is-in rounded-xl border p-4 transition-all duration-300 hover:-translate-y-0.5 ${
+                s.hot ? "border-brick/30 bg-tint" : "border-line bg-card"
+              }`}
+              style={{ transitionDelay: `${i * 60}ms` }}
+            >
+              <p className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-ink-faint">{s.k}</p>
+              <p className={`num-tabular mt-1.5 font-display text-3xl font-extrabold tracking-tight ${s.hot ? "text-brick" : "text-ink"}`}>
+                {s.v}
               </p>
-              <p className="mt-1 truncate font-mono text-[10px] tracking-[0.08em] text-ink-soft">{s.sub}</p>
+              <p className="mt-0.5 truncate text-[11.5px] text-ink-soft">{s.sub}</p>
             </div>
           ))}
         </section>
 
         {/* control deck */}
         <section id="board" className="mt-8 scroll-mt-24">
-          {view === "my" && user && (
-            <div className="fade-in mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-amber/50 bg-amber-soft/70 px-4 py-2.5">
-              <StarIcon filled className="h-4 w-4 text-[#8a6410]" />
-              <span className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-[#8a6410]/80">
-                my deals · {user.displayName}
-              </span>
-              <span className="font-display text-[14.5px] font-bold tracking-tight text-ink">
-                {follows.length} followed {follows.length === 1 ? "source" : "sources"}
-              </span>
-              <button
-                onClick={() => setView("all")}
-                className="ml-auto flex items-center gap-1.5 rounded-full border border-amber/60 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#8a6410] transition-all hover:bg-amber hover:text-ink active:scale-95"
-              >
-                <CloseIcon className="h-3 w-3" />
-                show all offers
-              </button>
-            </div>
-          )}
-
           {scope.type !== "all" && (
             <div className="fade-in mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-brick/30 bg-tint/70 px-4 py-2.5">
               {scope.type === "vendor" ? (
@@ -516,12 +504,12 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
               <span className="font-display text-[14.5px] font-bold tracking-tight text-ink">
                 {scopeLabel}
               </span>
-              <span className="num-tabular rounded-full bg-brick px-2 py-0.5 font-mono text-[10px] font-semibold text-paper">
+              <span className="num-tabular rounded-full bg-brick px-2 py-0.5 font-mono text-[10px] font-semibold text-card">
                 {scoped.length} offer{scoped.length === 1 ? "" : "s"}
               </span>
               <button
                 onClick={() => applyScope({ type: "all" })}
-                className="ml-auto flex items-center gap-1.5 rounded-full border border-brick/40 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-brick transition-all hover:bg-brick hover:text-paper active:scale-95"
+                className="ml-auto flex items-center gap-1.5 rounded-full border border-brick/40 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-brick transition-all hover:bg-brick hover:text-card active:scale-95"
               >
                 <CloseIcon className="h-3 w-3" />
                 show all offers
@@ -536,36 +524,44 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
                 ref={searchRef}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search merchants, headlines, codes…"
-                className="w-full rounded-full border border-line bg-card py-2.5 pl-10 pr-12 text-[14px] text-ink placeholder:text-ink-faint focus:border-brick focus:outline-none focus:ring-2 focus:ring-brick/25 transition-shadow"
+                placeholder="Search merchants, codes, categories…  ( / )"
+                className="w-full rounded-full border border-line bg-card py-2.5 pl-10 pr-4 text-[13.5px] text-ink placeholder:text-ink-faint transition-all focus:border-brick focus:outline-none focus:ring-2 focus:ring-brick/15"
               />
-              <kbd className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 rounded border border-line bg-paper px-1.5 py-0.5 font-mono text-[10px] text-ink-faint">
-                /
-              </kbd>
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-faint transition-colors hover:text-brick"
+                  aria-label="Clear search"
+                >
+                  <CloseIcon className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
-            <label className="flex items-center gap-2 rounded-full border border-line bg-card px-4 py-2.5">
-              <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">sort</span>
+
+            <div className="flex items-center gap-2">
               <select
                 value={sort}
                 onChange={(e) => setSort(e.target.value as SortKey)}
-                className="cursor-pointer bg-transparent font-mono text-[11.5px] font-medium uppercase tracking-[0.1em] text-ink focus:outline-none"
+                className="cursor-pointer rounded-full border border-line bg-card px-4 py-2.5 font-mono text-[11px] uppercase tracking-[0.1em] text-ink-soft focus:border-brick focus:outline-none"
+                aria-label="Sort offers"
               >
                 <option value="expiring">expiring soonest</option>
                 <option value="value">biggest discount</option>
-                <option value="recent">as synced</option>
+                <option value="recent">recently added</option>
               </select>
-            </label>
+            </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          {/* category chips */}
+          <div className="mt-3.5 flex flex-wrap gap-2">
             {(["all", ...categories] as Array<Category | "all">).map((c) => (
               <button
                 key={c}
                 onClick={() => setCategory(c)}
-                className={`rounded-full px-3.5 py-1.5 font-mono text-[10.5px] uppercase tracking-[0.12em] transition-all active:scale-95 ${
+                className={`rounded-full border px-3.5 py-1.5 font-mono text-[10.5px] uppercase tracking-[0.12em] transition-all active:scale-95 ${
                   category === c
-                    ? "bg-ink text-paper shadow-[0_4px_12px_-4px_rgba(39,19,18,0.5)]"
-                    : "border border-line bg-card text-ink-soft hover:border-brick/50 hover:text-brick"
+                    ? "border-brick bg-brick text-card shadow-[0_4px_14px_-4px_color-mix(in_oklab,var(--color-brick)_70%,transparent)]"
+                    : "border-line bg-card text-ink-soft hover:border-brick/50 hover:text-brick"
                 }`}
               >
                 {c === "all" ? `all · ${scoped.length || "…"}` : CATEGORY_LABEL[c]}
@@ -573,74 +569,36 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
             ))}
           </div>
 
-          <div className="mt-5 flex items-center justify-between">
-            <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-ink-faint">
-              {done
-                ? scope.type !== "all"
-                  ? `showing ${visible.length} of ${scoped.length} · in scope`
-                  : `showing ${visible.length} of ${offers.length}`
-                : "receiving transmission…"}
-            </p>
-            {filtering && (
-              <button
-                onClick={() => {
-                  setSearch("");
-                  setCategory("all");
-                }}
-                className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-ember underline-offset-4 hover:underline"
-              >
-                clear filters ×
-              </button>
-            )}
-          </div>
-        </section>
+          <p className="num-tabular mt-3 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+            {done
+              ? scope.type !== "all"
+                ? `showing ${visible.length} of ${scoped.length} · in scope`
+                : `showing ${visible.length} of ${offers.length}`
+              : "reading feed…"}
+          </p>
 
-        {/* offer grid */}
-        <section className="mt-4">
-          {!done && offers.length === 0 ? (
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {/* the board */}
+          {!done ? (
+            <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {Array.from({ length: 8 }).map((_, i) => (
                 <SkeletonTile key={i} />
               ))}
             </div>
-          ) : view === "my" && done && pool.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-amber/60 bg-amber-soft/50 px-6 py-16 text-center">
-              <StarIcon filled className="h-12 w-12 text-amber" />
-              <p className="font-display text-xl font-bold text-ink">Your deals list is empty</p>
-              <p className="max-w-sm text-[13px] leading-relaxed text-ink-soft">
-                {follows.length === 0
-                  ? "Follow a card tier or a merchant — hit the ★ on any tile, or browse banks and vendors — and only those offers will show up here."
-                  : "None of your followed cards or merchants have offers in the current feed. Try widening back to all offers."}
+          ) : view === "my" && follows.length === 0 ? (
+            <div className="fade-in mx-auto max-w-md rounded-xl border border-dashed border-line bg-card/60 px-6 py-14 text-center">
+              <StarIcon className="mx-auto h-9 w-9 text-amber" filled />
+              <p className="mt-3 font-display text-[19px] font-bold tracking-tight text-ink">
+                Your deals list is empty
               </p>
-              <div className="mt-1 flex flex-wrap justify-center gap-2">
-                <button
-                  onClick={() => setDrawerOpen(true)}
-                  className="rounded-full bg-ink px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-paper transition-colors hover:bg-brick"
-                >
-                  Browse & follow
-                </button>
-                <button
-                  onClick={() => setView("all")}
-                  className="rounded-full border border-line px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-ink-soft transition-colors hover:border-brick hover:text-brick"
-                >
-                  Back to all offers
-                </button>
-              </div>
-            </div>
-          ) : done && offers.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-line bg-card/60 px-6 py-16 text-center">
-              <TagEmpty />
-              <p className="font-display text-xl font-bold text-ink">Waiting for first n8n sync</p>
-              <p className="max-w-sm text-[13px] leading-relaxed text-ink-soft">
-                The board only shows real offers produced by the n8n pipeline. Run a source
-                workflow (or the master scheduler) so it writes to Postgres, then hit
-                “Sync feed” to pull it in.
+              <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">
+                Star the card tiers you own or the merchants you love — from any tile or
+                offer detail — and they collect here.
               </p>
               <button
-                onClick={syncPass}
-                className="mt-1 rounded-full bg-ink px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-paper transition-colors hover:bg-brick"
+                onClick={() => setView("all")}
+                className="mt-4 rounded-full bg-brick px-5 py-2.5 font-mono text-[10.5px] uppercase tracking-[0.14em] text-card transition-all hover:opacity-90 active:scale-95"
               >
-                Sync feed now
+                Browse the board
               </button>
             </div>
           ) : done && scoped.length === 0 ? (
@@ -655,7 +613,7 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
               </p>
               <button
                 onClick={() => applyScope({ type: "all" })}
-                className="mt-1 rounded-full bg-ink px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-paper transition-colors hover:bg-brick"
+                className="mt-1 rounded-full bg-ink px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-paper transition-colors hover:bg-brick hover:text-card"
               >
                 Back to all offers
               </button>
@@ -666,16 +624,14 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
               <p className="font-display text-xl font-bold text-ink">No deals on the board</p>
               <p className="max-w-sm text-[13px] leading-relaxed text-ink-soft">
                 {view === "my"
-                  ? `None of the offers you follow match${search ? ` “${search}”` : ""} right now. Widen the sweep or check your followed sources.`
-                  : scope.type !== "all"
-                    ? `No ${scopeLabel} offers match${search ? ` “${search}”` : ""} in this category. Widen the sweep or step out of scope.`
-                    : `No offers match${search ? ` “${search}”` : ""} in this category. Widen the sweep.`}
+                  ? "None of your followed offers match the current filters."
+                  : `No offers match${search ? ` “${search}”` : ""} in this category. Widen the sweep.`}
               </p>
               <div className="mt-1 flex flex-wrap justify-center gap-2">
                 {scope.type !== "all" && (
                   <button
                     onClick={() => applyScope({ type: "all" })}
-                    className="rounded-full bg-ink px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-paper transition-colors hover:bg-brick"
+                    className="rounded-full bg-ink px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-paper transition-colors hover:bg-brick hover:text-card"
                   >
                     Clear scope
                   </button>
@@ -688,7 +644,7 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
                   className={`rounded-full px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] transition-colors ${
                     scope.type !== "all"
                       ? "border border-line text-ink-soft hover:border-brick hover:text-brick"
-                      : "bg-ink text-paper hover:bg-brick"
+                      : "bg-ink text-paper hover:bg-brick hover:text-card"
                   }`}
                 >
                   Reset sweep
@@ -696,30 +652,82 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {visible.map((o, i) => (
-                <OfferTile
-                  key={o.id}
-                  offer={o}
-                  index={i}
-                  onOpen={setSelected}
-                  followed={follows.includes(cardKey(o.bank, o.card))}
-                  onToggleFollow={(offer) => toggleCard(offer.bank, offer.card)}
-                />
-              ))}
-            </div>
+            <>
+              <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {pageItems.map((o, i) => (
+                  <OfferTile
+                    key={o.id}
+                    offer={o}
+                    index={i}
+                    followed={offerFollowed(o, follows)}
+                    onOpen={setSelected}
+                    onToggleFollow={(offer) => toggleCard(offer.bank, offer.card)}
+                  />
+                ))}
+              </div>
+
+              {/* infinite-scroll sentinel */}
+              {viewMode === "infinite" && loaded < visible.length && (
+                <div ref={sentinelRef} className="flex items-center justify-center gap-2 py-8 font-mono text-[10.5px] uppercase tracking-[0.16em] text-ink-faint">
+                  <span className="spin inline-block h-3.5 w-3.5 rounded-full border-2 border-line border-t-brick" />
+                  loading more…
+                </div>
+              )}
+
+              <Paginator
+                viewMode={viewMode}
+                onViewMode={(m) => {
+                  setViewMode(m);
+                  try {
+                    localStorage.setItem(VIEW_KEY, m);
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+                pageSize={pageSize}
+                onPageSize={(n) => {
+                  setPageSize(n);
+                  setLoaded(n);
+                  setPage(1);
+                  try {
+                    localStorage.setItem(PAGESIZE_KEY, String(n));
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+                page={clampedPage}
+                totalPages={totalPages}
+                onPage={(n) => {
+                  setPage(n);
+                  document.getElementById("board")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                totalItems={visible.length}
+              />
+            </>
           )}
         </section>
 
+        <SourcesLedger
+          outcomes={payload?.sources ?? []}
+          custom={customSources}
+          onPick={(name) => showToast(`${name} is queued — register it from the Control Room to fast-track`)}
+        />
       </main>
 
       <Footer />
+
+      {toast && (
+        <div className="toast-up fixed bottom-6 left-1/2 z-[80] flex -translate-x-1/2 items-center gap-2 rounded-full border border-line bg-card px-4 py-2.5 font-mono text-[11.5px] tracking-[0.06em] text-ink shadow-[0_18px_40px_-12px_rgba(0,0,0,0.45)]">
+          <CheckIcon className="h-3.5 w-3.5 text-brick" />
+          {toast}
+        </div>
+      )}
 
       {selected && (
         <OfferModal
           offer={selected}
           scrapedAt={lastSync}
-          generator={generator}
+          generator={payload?.generator ?? "onlydeals"}
           cardFollowed={follows.includes(cardKey(selected.bank, selected.card))}
           vendorFollowed={follows.includes(vendorKey(selected.merchant))}
           onToggleCard={(o) => toggleCard(o.bank, o.card)}
@@ -738,25 +746,13 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
         onApply={applyScope}
         onClose={() => setDrawerOpen(false)}
         onLocked={(name) =>
-          showToast(`${name} is queued — its n8n workflow hasn't posted offers yet`)
+          showToast(`${name} is still queued — Al Rajhi and Jarir are the live engines for now`)
         }
         onToggleCard={toggleCard}
         onToggleVendor={toggleVendor}
       />
 
-      <AuthModal
-        open={authOpen}
-        intent={authIntent}
-        onClose={() => setAuthOpen(false)}
-        onAuthed={handleAuthed}
-      />
-
-      {toast && (
-        <div className="toast-up fixed bottom-6 left-1/2 z-[80] flex -translate-x-1/2 items-center gap-2 rounded-full border border-term-line bg-term px-4 py-2.5 font-mono text-[11.5px] tracking-[0.06em] text-paper shadow-[0_18px_40px_-12px_rgba(25,16,16,0.6)]">
-          <CheckIcon className="h-3.5 w-3.5 text-flare" />
-          {toast}
-        </div>
-      )}
+      <AuthModal open={authOpen} intent={authIntent} onClose={() => setAuthOpen(false)} onAuthed={handleAuthed} />
     </div>
   );
 }

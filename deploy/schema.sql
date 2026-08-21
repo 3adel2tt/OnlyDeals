@@ -1,38 +1,48 @@
--- onlydeals · offers table
--- Matches the column set the n8n source workflows upsert into, and what the
--- feed service reads to build offer.v1. Run as a role that owns the schema:
---   psql -U onlydeals -d onlydeals -f schema.sql
+-- onlydeals · Postgres schema
+-- The feed service (deploy/feed-service.mjs) also runs these as
+-- CREATE TABLE IF NOT EXISTS on boot, so applying this file manually is
+-- optional ("zero manual migration"). Keep the two in sync.
 
+-- ---------------------------------------------------------------- offers
 CREATE TABLE IF NOT EXISTS offers (
-    id             BIGSERIAL PRIMARY KEY,
-    merchant_id    TEXT        NOT NULL,
-    source         TEXT        NOT NULL,                 -- e.g. 'alinma'
-    source_type    TEXT        NOT NULL DEFAULT 'bank',  -- 'bank' | 'vendor'
-    card_name      TEXT        NOT NULL DEFAULT 'All cards',
-    offer_title    TEXT        NOT NULL,                 -- merchant / brand
-    description    TEXT,
-    discount_value TEXT,                                 -- e.g. '20%' or '50 SAR'
-    discount_type  TEXT,                                 -- 'percentage' | 'fixed' | ...
-    min_spend      NUMERIC,
-    max_discount   NUMERIC,
-    start_date     DATE,
-    end_date       DATE,
-    terms_url      TEXT,
-    image_url      TEXT,
-    active         BOOLEAN     NOT NULL DEFAULT TRUE,
-    scraped_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    -- one live row per (merchant, source, offer) — what the n8n upsert matches on
-    CONSTRAINT offers_unique_offer UNIQUE (merchant_id, source, offer_title)
+  id              serial PRIMARY KEY,
+  source          text        NOT NULL,
+  ext_id          text        NOT NULL,
+  merchant        text        NOT NULL,
+  headline        text        NOT NULL DEFAULT '',
+  discount_label  text        NOT NULL DEFAULT '',
+  value           numeric     NOT NULL DEFAULT 0,
+  kind            text        NOT NULL DEFAULT 'percent',   -- percent | cashback | bogo | installments
+  category        text        NOT NULL DEFAULT 'online',
+  bank            text        NOT NULL DEFAULT '',
+  card            text        NOT NULL DEFAULT '',
+  image           text        NOT NULL DEFAULT '',
+  cards           jsonb       NOT NULL DEFAULT '[]',
+  code            text,
+  link            text        NOT NULL DEFAULT '',
+  expires_at      timestamptz,
+  terms           jsonb       NOT NULL DEFAULT '[]',
+  last_seen       timestamptz NOT NULL DEFAULT now(),
+  active          boolean     NOT NULL DEFAULT true,
+  UNIQUE (source, ext_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_offers_active       ON offers (active);
-CREATE INDEX IF NOT EXISTS idx_offers_source       ON offers (source);
-CREATE INDEX IF NOT EXISTS idx_offers_end_date     ON offers (end_date);
+CREATE INDEX IF NOT EXISTS offers_active_idx   ON offers (active);
+CREATE INDEX IF NOT EXISTS offers_last_seen_idx ON offers (last_seen);
 
--- Optional role the feed service connects as (read-only). Skip if you reuse
--- the owning role for the service instead.
--- CREATE ROLE onlydeals_ro LOGIN PASSWORD 'change-me';
--- GRANT CONNECT ON DATABASE onlydeals TO onlydeals_ro;
--- GRANT USAGE ON SCHEMA public TO onlydeals_ro;
--- GRANT SELECT ON offers TO onlydeals_ro;
+-- ----------------------------------------------------------------- users
+CREATE TABLE IF NOT EXISTS users (
+  id           serial       PRIMARY KEY,
+  email        text         UNIQUE NOT NULL,
+  pass_hash    text         NOT NULL,                      -- scrypt: "<saltHex>:<hashHex>"
+  display_name text,
+  role         text         NOT NULL DEFAULT 'user',       -- user | admin
+  disabled     boolean      NOT NULL DEFAULT false,
+  created_at   timestamptz  NOT NULL DEFAULT now()
+);
+
+-- ---------------------------------------------------------- prune helper
+-- Source workflows call this after each upsert batch, e.g. alrajhi:
+--   UPDATE offers SET active = false
+--   WHERE source = 'alrajhi' AND active = true
+--     AND last_seen < now() - interval '12 hours';

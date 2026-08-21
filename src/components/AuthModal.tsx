@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { User } from "../types";
-import { login, signup } from "../lib/auth";
+import { apiLogin, apiRegister } from "../lib/api";
 import { BrandMark, CloseIcon, LockIcon, UserIcon } from "./icons";
 
 interface Props {
@@ -13,17 +13,19 @@ interface Props {
 const INTENT_COPY: Record<Props["intent"], { title: string; sub: string }> = {
   generic: {
     title: "onlydeals account",
-    sub: "Sign in to follow card tiers and merchants — your own slice of the board, saved on this device.",
+    sub: "Sign in to follow card tiers and merchants — your own slice of the board, saved to your account.",
   },
   follow: {
     title: "Sign in to follow",
-    sub: "Following is per-account — create one (takes ten seconds) and your deals list is saved on this device.",
+    sub: "Following is per-account — create one (takes ten seconds) and your deals list is yours everywhere.",
   },
 };
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function AuthModal({ open, intent, onClose, onAuthed }: Props) {
   const [mode, setMode] = useState<"login" | "signup">("login");
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -47,26 +49,33 @@ export default function AuthModal({ open, intent, onClose, onAuthed }: Props) {
 
   const copy = INTENT_COPY[intent];
 
-  const submit = () => {
+  const submit = async () => {
     if (busy) return;
+    const em = email.trim();
+    if (!EMAIL_RE.test(em)) {
+      setError("Enter a valid email address.");
+      setShake((s) => s + 1);
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password needs at least 6 characters.");
+      setShake((s) => s + 1);
+      return;
+    }
     setBusy(true);
     setError(null);
-    window.setTimeout(() => {
-      const res =
-        mode === "login"
-          ? login(username, password, { publicOnly: true })
-          : signup(username, password, displayName);
-      setBusy(false);
-      if (!res.ok) {
-        setError(res.error);
-        setShake((s) => s + 1);
-        return;
-      }
-      setUsername("");
-      setPassword("");
-      setDisplayName("");
-      onAuthed(res.user);
-    }, 320);
+    const res =
+      mode === "login" ? await apiLogin(em, password) : await apiRegister(em, password, displayName);
+    setBusy(false);
+    if (!res.ok) {
+      setError(res.error);
+      setShake((s) => s + 1);
+      return;
+    }
+    setEmail("");
+    setPassword("");
+    setDisplayName("");
+    onAuthed(res.user);
   };
 
   const inputCls =
@@ -94,7 +103,7 @@ export default function AuthModal({ open, intent, onClose, onAuthed }: Props) {
         </button>
 
         <div className="flex items-center gap-3">
-          <BrandMark className="h-9 w-9" />
+          <BrandMark className="h-9 w-9 text-ink" />
           <h2 className="font-display text-[21px] font-extrabold tracking-tight text-ink">
             {copy.title}
           </h2>
@@ -116,7 +125,7 @@ export default function AuthModal({ open, intent, onClose, onAuthed }: Props) {
               }}
               className={`flex items-center justify-center gap-1.5 rounded-md px-2 py-2 font-mono text-[10.5px] uppercase tracking-[0.12em] transition-all ${
                 mode === id
-                  ? "bg-brick font-semibold text-paper shadow-[0_2px_10px_-2px_rgba(200,16,46,0.5)]"
+                  ? "bg-brick font-semibold text-card shadow-[0_2px_10px_-2px_color-mix(in_oklab,var(--color-brick)_60%,transparent)]"
                   : "text-ink-faint hover:text-ink"
               }`}
             >
@@ -128,19 +137,20 @@ export default function AuthModal({ open, intent, onClose, onAuthed }: Props) {
 
         <div className="mt-4 space-y-3">
           <input
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
-            placeholder="Username"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && void submit()}
+            type="email"
+            placeholder="you@example.com"
             autoFocus
             className={inputCls}
-            aria-label="Username"
+            aria-label="Email"
           />
           {mode === "signup" && (
             <input
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submit()}
+              onKeyDown={(e) => e.key === "Enter" && void submit()}
               placeholder="Display name (optional)"
               className={inputCls}
               aria-label="Display name"
@@ -149,7 +159,7 @@ export default function AuthModal({ open, intent, onClose, onAuthed }: Props) {
           <input
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
+            onKeyDown={(e) => e.key === "Enter" && void submit()}
             type="password"
             placeholder="Password"
             className={inputCls}
@@ -164,13 +174,13 @@ export default function AuthModal({ open, intent, onClose, onAuthed }: Props) {
           )}
 
           <button
-            onClick={submit}
+            onClick={() => void submit()}
             disabled={busy}
-            className="flex w-full items-center justify-center gap-2 rounded-full bg-brick px-5 py-3 font-mono text-[11.5px] font-medium uppercase tracking-[0.14em] text-paper transition-all hover:bg-ink active:scale-[0.98] disabled:opacity-60"
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-brick px-5 py-3 font-mono text-[11.5px] font-medium uppercase tracking-[0.14em] text-card transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-60"
           >
             {busy ? (
               <>
-                <span className="spin inline-block h-3.5 w-3.5 rounded-full border-2 border-paper/30 border-t-paper" />
+                <span className="spin inline-block h-3.5 w-3.5 rounded-full border-2 border-card/30 border-t-card" />
                 Checking…
               </>
             ) : mode === "login" ? (
@@ -182,7 +192,7 @@ export default function AuthModal({ open, intent, onClose, onAuthed }: Props) {
         </div>
 
         <p className="mt-4 text-center text-[11px] leading-relaxed text-ink-faint">
-          Accounts live only in this browser — nothing is sent anywhere.
+          Sessions last 7 days · passwords are scrypt-hashed server-side.
         </p>
       </div>
     </div>

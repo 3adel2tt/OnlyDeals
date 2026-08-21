@@ -1,32 +1,15 @@
 @import "tailwindcss";
 
+/*
+ * Dual-theme token system. Dark is the default; adding `.light` to
+ * <html> swaps the full token set. Components style ONLY from tokens.
+ */
 @theme {
   --font-display: "Bricolage Grotesque", "Instrument Sans", sans-serif;
   --font-body: "Instrument Sans", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  /* red theme · v0.5 */
-  --color-paper: #f3efec;
-  --color-card: #fbf9f6;
-  --color-ink: #271312;
-  --color-ink-soft: #5d4744;
-  --color-ink-faint: #8c7672;
-  --color-line: #e1d7d0;
-  --color-brick: #c8102e;
-  --color-flare: #ff5747;
-  --color-live: #1fae67;
-  --color-tint: #f8e1de;
-  --color-amber: #e8b93e;
-  --color-amber-soft: #fdf3d8;
-  --color-ember: #d94f2b;
-  --color-ember-soft: #fbe6de;
-  --color-term: #191010;
-  --color-term-line: #35211f;
-}
-
-@custom-variant dark (&:where(.dark, .dark *));
-
-.dark {
+  /* ---- dark (default) ---- */
   --color-paper: #141010;
   --color-card: #1d1615;
   --color-ink: #f1e9e5;
@@ -35,12 +18,47 @@
   --color-line: #332725;
   --color-brick: #ff5747;
   --color-flare: #ff5747;
+  --color-live: #34c97f;
   --color-tint: #2a1a18;
+  --color-amber: #e8b93e;
   --color-amber-soft: #2b2213;
   --color-ember: #ff7a5c;
   --color-ember-soft: #33190f;
   --color-term: #100c0c;
   --color-term-line: #2b1e1c;
+  --color-term-2: #1c1312;
+  --color-mut: #a9928b;
+  --color-dim: #7c675f;
+  --color-okc: #4fd68c;
+
+  /* fixed scrim for text painted over photos — same in both themes */
+  --color-scrim: #17100e;
+  --color-scrim-ink: #f5efe9;
+  --color-scrim-accent: #ff9c8f;
+}
+
+/* ---- light ---- */
+.light {
+  --color-paper: #f6f1ea;
+  --color-card: #fdfaf5;
+  --color-ink: #211613;
+  --color-ink-soft: #574943;
+  --color-ink-faint: #84716a;
+  --color-line: #e5dbd1;
+  --color-brick: #c8102e;
+  --color-flare: #c8102e;
+  --color-live: #0d7a47;
+  --color-tint: #f9e6e2;
+  --color-amber: #b8860b;
+  --color-amber-soft: #fbf0d3;
+  --color-ember: #c2401f;
+  --color-ember-soft: #f9e3da;
+  --color-term: #efe7dc;
+  --color-term-line: #ddd0c0;
+  --color-term-2: #f8f1e7;
+  --color-mut: #5f5350;
+  --color-dim: #93827b;
+  --color-okc: #0d7a47;
 }
 
 html {
@@ -52,19 +70,12 @@ body {
   color: var(--color-ink);
   font-family: var(--font-body);
   background-image:
-    radial-gradient(1100px 520px at 8% -6%, rgba(200, 16, 46, 0.08), transparent 62%),
-    radial-gradient(900px 480px at 100% 12%, rgba(232, 185, 62, 0.1), transparent 60%),
-    radial-gradient(rgba(39, 19, 18, 0.07) 1px, transparent 1px);
+    radial-gradient(1100px 520px at 8% -6%, color-mix(in oklab, var(--color-brick) 9%, transparent), transparent 62%),
+    radial-gradient(900px 480px at 100% 12%, color-mix(in oklab, var(--color-amber) 10%, transparent), transparent 60%),
+    radial-gradient(color-mix(in oklab, var(--color-ink) 7%, transparent) 1px, transparent 1px);
   background-size: auto, auto, 22px 22px;
   background-attachment: fixed;
   transition: background-color 0.3s ease, color 0.3s ease;
-}
-
-.dark body {
-  background-image:
-    radial-gradient(1100px 520px at 8% -6%, rgba(255, 87, 71, 0.07), transparent 62%),
-    radial-gradient(900px 480px at 100% 12%, rgba(232, 185, 62, 0.06), transparent 60%),
-    radial-gradient(rgba(241, 233, 229, 0.06) 1px, transparent 1px);
 }
 
 ::selection {
@@ -72,10 +83,10 @@ body {
   color: #1a0d0b;
 }
 
-/* ---------- terminal ---------- */
+/* ---------- scrollbars ---------- */
 .term-scroll::-webkit-scrollbar { width: 8px; }
 .term-scroll::-webkit-scrollbar-track { background: transparent; }
-.term-scroll::-webkit-scrollbar-thumb { background: #3d2523; border-radius: 8px; }
+.term-scroll::-webkit-scrollbar-thumb { background: var(--color-term-line); border-radius: 8px; }
 
 @keyframes blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0; } }
 .caret { animation: blink 1s steps(1) infinite; }
