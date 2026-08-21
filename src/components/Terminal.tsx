@@ -15,8 +15,8 @@ interface Props {
 }
 
 export default function Terminal({ logs, status }: Props) {
-  const running = status === "syncing";
   const bodyRef = useRef<HTMLDivElement>(null);
+  const running = status === "syncing";
 
   useEffect(() => {
     const el = bodyRef.current;

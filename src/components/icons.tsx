@@ -2,18 +2,20 @@ interface P {
   className?: string;
 }
 
-/** Static deal-tag mark with a % punched through it — the onlydeals brand. */
+/** Deal tag with a % sign — the static onlydeals mark. */
 export function BrandMark({ className = "w-8 h-8" }: P) {
   return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden="true">
+    <svg viewBox="0 0 32 32" className={className} fill="none" aria-hidden="true">
       <path
-        d="M4.6 16 15.2 5.4a2 2 0 0 1 1.4-.6H26a2.4 2.4 0 0 1 2.4 2.4v17.6A2.4 2.4 0 0 1 26 27.2H16.6a2 2 0 0 1-1.4-.6L4.6 16Z"
-        fill="var(--color-brick)"
+        d="M3.2 15.2 14.4 4a2.4 2.4 0 0 1 1.7-.7H26a2.8 2.8 0 0 1 2.8 2.8v9.9a2.4 2.4 0 0 1-.7 1.7L16.9 28.9a2.6 2.6 0 0 1-3.7 0L3.2 18.9a2.6 2.6 0 0 1 0-3.7Z"
+        stroke="var(--color-brick)"
+        strokeWidth="2.4"
+        strokeLinejoin="round"
       />
-      <circle cx="9.4" cy="16" r="1.7" fill="var(--color-paper)" />
-      <path d="M23.4 10.6 15.6 21.4" stroke="var(--color-paper)" strokeWidth="2.4" strokeLinecap="round" />
-      <circle cx="15.9" cy="11.6" r="2.3" stroke="var(--color-paper)" strokeWidth="2" fill="none" />
-      <circle cx="23.1" cy="20.4" r="2.3" stroke="var(--color-paper)" strokeWidth="2" fill="none" />
+      <circle cx="8.4" cy="15.2" r="1.7" fill="var(--color-brick)" />
+      <path d="M23.2 9.8 14.8 21.4" stroke="var(--color-ink)" strokeWidth="2.2" strokeLinecap="round" />
+      <circle cx="15.3" cy="10.7" r="2.4" stroke="var(--color-ink)" strokeWidth="2" />
+      <circle cx="22.6" cy="20.4" r="2.4" stroke="var(--color-ink)" strokeWidth="2" />
     </svg>
   );
 }
@@ -155,7 +157,13 @@ export function PulseIcon({ className = "w-4 h-4" }: P) {
 
 export function StarIcon({ className = "w-4 h-4", filled = false }: P & { filled?: boolean }) {
   return (
-    <svg viewBox="0 0 20 20" className={className} fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.6">
+    <svg
+      viewBox="0 0 20 20"
+      className={className}
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="1.6"
+    >
       <path
         d="M10 2.9l2.1 4.4 4.9.7-3.5 3.4.8 4.8L10 13.9l-4.3 2.3.8-4.8L3 8l4.9-.7L10 2.9z"
         strokeLinejoin="round"
@@ -168,7 +176,7 @@ export function UserIcon({ className = "w-4 h-4" }: P) {
   return (
     <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
       <circle cx="10" cy="7" r="3.2" />
-      <path d="M3.8 16.5c.7-3 3.2-4.5 6.2-4.5s5.5 1.5 6.2 4.5" strokeLinecap="round" />
+      <path d="M3.8 16.5c.9-3 3.3-4.5 6.2-4.5s5.3 1.5 6.2 4.5" strokeLinecap="round" />
     </svg>
   );
 }
@@ -176,8 +184,8 @@ export function UserIcon({ className = "w-4 h-4" }: P) {
 export function LockIcon({ className = "w-4 h-4" }: P) {
   return (
     <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
-      <rect x="4.5" y="9" width="11" height="8" rx="1.6" />
-      <path d="M7 9V6.8a3 3 0 0 1 6 0V9M10 12.2v1.8" strokeLinecap="round" />
+      <rect x="4.5" y="8.5" width="11" height="8" rx="1.6" />
+      <path d="M7 8.5V6.8a3 3 0 0 1 6 0v1.7" strokeLinecap="round" />
     </svg>
   );
 }
@@ -185,15 +193,7 @@ export function LockIcon({ className = "w-4 h-4" }: P) {
 export function LogoutIcon({ className = "w-4 h-4" }: P) {
   return (
     <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
-      <path d="M8 4H5.5A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8M13 7l3 3-3 3M16 10H8.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-export function DownloadIcon({ className = "w-4 h-4" }: P) {
-  return (
-    <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.7">
-      <path d="M10 3.5v9m0 0 3.5-3.5M10 12.5 6.5 9M4 14.5v1A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5v-1" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 3.5H5.5A1.5 1.5 0 0 0 4 5v10a1.5 1.5 0 0 0 1.5 1.5H8M13 6.5 16.5 10 13 13.5M16.5 10H8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -201,8 +201,8 @@ export function DownloadIcon({ className = "w-4 h-4" }: P) {
 export function SunIcon({ className = "w-4 h-4" }: P) {
   return (
     <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
-      <circle cx="10" cy="10" r="3.6" />
-      <path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4" strokeLinecap="round" />
+      <circle cx="10" cy="10" r="3.4" />
+      <path d="M10 2.2v2M10 15.8v2M2.2 10h2M15.8 10h2M4.5 4.5l1.4 1.4M14.1 14.1l1.4 1.4M15.5 4.5l-1.4 1.4M5.9 14.1l-1.4 1.4" strokeLinecap="round" />
     </svg>
   );
 }
@@ -210,7 +210,15 @@ export function SunIcon({ className = "w-4 h-4" }: P) {
 export function MoonIcon({ className = "w-4 h-4" }: P) {
   return (
     <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.6">
-      <path d="M16.5 11.8A6.8 6.8 0 0 1 8.2 3.5a6.8 6.8 0 1 0 8.3 8.3Z" strokeLinejoin="round" />
+      <path d="M16.5 11.8A7 7 0 0 1 8.2 3.5a7 7 0 1 0 8.3 8.3Z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function DownloadIcon({ className = "w-4 h-4" }: P) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.7">
+      <path d="M10 3.5v8.5m0 0 3.4-3.4M10 12 6.6 8.6M3.5 13.5v2A1.5 1.5 0 0 0 5 17h10a1.5 1.5 0 0 0 1.5-1.5v-2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -218,10 +226,10 @@ export function MoonIcon({ className = "w-4 h-4" }: P) {
 export function WorkflowIcon({ className = "w-4 h-4" }: P) {
   return (
     <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.5">
-      <rect x="2.5" y="3" width="5" height="5" rx="1.2" />
-      <rect x="12.5" y="12" width="5" height="5" rx="1.2" />
-      <rect x="12.5" y="3" width="5" height="5" rx="1.2" />
-      <path d="M7.5 5.5h5M15 8v4M7.5 14.5h5" strokeLinecap="round" />
+      <circle cx="4.5" cy="5" r="2" />
+      <circle cx="15.5" cy="5" r="2" />
+      <circle cx="10" cy="15" r="2" />
+      <path d="M5.7 6.6 9 13.2M14.3 6.6 11 13.2M6.5 5h7" strokeLinecap="round" />
     </svg>
   );
 }

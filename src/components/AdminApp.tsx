@@ -88,8 +88,8 @@ function discoveredFromFeed(): string[] {
   return Array.from(ids);
 }
 
-const INGEST_CONTRACT = `POST  {{ ONLYDEALS_INGEST_URL }}
-HEAD  x-api-key: {{ ONLYDEALS_API_KEY }}
+const INGEST_CONTRACT = `POST  {{ OFFRADAR_INGEST_URL }}
+HEAD  x-api-key: {{ OFFRADAR_API_KEY }}
 
 {
   "version": "offer.v1",
@@ -284,7 +284,7 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
   const pushTest = () => {
     pushLocalFeed(testPushPayload());
     setLocalFeedTick((x) => x + 1);
-    showToast("Test feed pushed — workflows posting to ingest will appear in Workflows");
+    showToast("Test feed pushed — new generators appear in Workflows on rescan");
   };
 
   /* ---------------- login gate ---------------- */
@@ -389,7 +389,6 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
             </p>
           </div>
 
-          {/* nav tabs */}
           <nav className="ml-4 hidden items-center gap-1 rounded-full border border-term-line bg-[#1f1412] p-1 sm:flex">
             {(
               [
@@ -441,7 +440,6 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
             </button>
           </div>
         </div>
-        {/* mobile tabs */}
         <nav className="flex items-center gap-1 border-t border-term-line px-4 py-2 sm:hidden">
           {(
             [
@@ -517,7 +515,7 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
                       style={{ animationDelay: `${i * 40}ms` }}
                     >
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-flare/30 bg-flare/10 text-flare">
-                        <WorkflowIcon className="h-4.5 w-4.5" />
+                        <WorkflowIcon className="h-4 w-4" />
                       </span>
                       <div className="min-w-[180px]">
                         <p className="flex items-center gap-2 font-display text-[15px] font-bold tracking-tight">
@@ -606,7 +604,6 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
         {/* ================= OVERVIEW ================= */}
         {tab === "control" && (
           <>
-            {/* pipeline */}
             <section className="rounded-xl border border-term-line bg-[#1f1412]">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-term-line px-5 py-4">
                 <div>
@@ -627,7 +624,7 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
                 {sourceWorkflows.map((p) => (
                   <div key={p.id} className="flex flex-wrap items-center gap-3 px-5 py-3.5">
                     <span className="flex h-8 w-8 items-center justify-center rounded-md border border-flare/30 bg-flare/10 font-display text-[11px] font-extrabold text-flare">
-                      {p.name.slice(0, 2).toUpperCase()}
+                      {p.name.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase()}
                     </span>
                     <div className="min-w-[150px]">
                       <p className="font-display text-[15px] font-bold tracking-tight">{p.name}</p>
@@ -664,7 +661,6 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
             </section>
 
             <div className="grid gap-6 lg:grid-cols-2">
-              {/* workflows import */}
               <section className="rounded-xl border border-term-line bg-[#1f1412]">
                 <div className="border-b border-term-line px-5 py-4">
                   <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-flare">/// 02 · n8n workflows</p>
@@ -702,20 +698,27 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
                   <ol className="list-decimal space-y-1 pl-5 font-mono text-[11px] leading-relaxed text-[#8f766f]">
                     <li>Import all three into your n8n instance (Workflows → Import from file).</li>
                     <li>
-                      Set env vars: <code className="text-flare">ONLYDEALS_INGEST_URL</code>,{" "}
-                      <code className="text-flare">ONLYDEALS_API_KEY</code>,{" "}
-                      <code className="text-flare">ONLYDEALS_N8N_BASE</code>.
+                      Set env vars: <code className="text-flare">OFFRADAR_INGEST_URL</code>,{" "}
+                      <code className="text-flare">OFFRADAR_API_KEY</code>,{" "}
+                      <code className="text-flare">OFFRADAR_N8N_BASE</code> (see{" "}
+                      <code className="text-flare">deploy/DEPLOY.md</code>).
                     </li>
                     <li>Activate the master scheduler — it becomes the heartbeat.</li>
                     <li>
                       Point <code className="text-flare">FEED_URL</code> in{" "}
                       <code className="text-flare">src/lib/feed.ts</code> at your merged onlydeals.json.
                     </li>
+                    <li>
+                      Google Sheets audit: create the credential{" "}
+                      <code className="text-flare">onlydeals-sheets-sa</code> (Google Sheets OAuth2 API →
+                      Service Account → your SA JSON), connect it to the “Log run to sheet” nodes, paste
+                      your spreadsheet ID, and share the sheet with the service account's client_email.
+                      Headers: <code className="text-flare">timestamp · source · offers · status · generator</code>.
+                    </li>
                   </ol>
                 </div>
               </section>
 
-              {/* ingest */}
               <section className="rounded-xl border border-term-line bg-[#1f1412]">
                 <div className="border-b border-term-line px-5 py-4">
                   <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-flare">/// 03 · ingest contract</p>
@@ -768,14 +771,14 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
                       )}
                     </div>
                     <p className="mt-2 text-[11px] leading-relaxed text-[#6b544e]">
-                      Simulates the ingest endpoint — the public site picks it up on its next sync.
+                      Simulates the ingest endpoint — the public site picks it up on its next sync, and new
+                      generators show up on the Workflows page.
                     </p>
                   </div>
                 </div>
               </section>
             </div>
 
-            {/* registry */}
             <section className="rounded-xl border border-term-line bg-[#1f1412]">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-term-line px-5 py-4">
                 <div>

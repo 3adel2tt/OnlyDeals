@@ -2,13 +2,12 @@ import type { StoredUser, User } from "../types";
 
 /**
  * Local, browser-only auth. Accounts, hashes and sessions live in
- * localStorage and never leave the device — this is demo-grade on purpose
- * (swap for a real backend before exposing anything public).
+ * localStorage and never leave the device — demo-grade on purpose.
+ * The admin account only signs in via the /adminn control room.
  */
 
 export const USERS_KEY = "onlydeals:users:v1";
 export const SESSION_KEY = "onlydeals:session:v1";
-/* salt is frozen at first release — changing it would invalidate existing hashes */
 const SALT = "offradar::v0.3::";
 
 export const DEMO_ADMIN = { username: "admin", password: "admin123" };
@@ -62,7 +61,7 @@ function toPublic(u: StoredUser): User {
   };
 }
 
-/** Seeds the admin account on first run so the registry is usable out of the box. */
+/** Seeds the admin account on first run so the control room is usable out of the box. */
 export function ensureSeeded(): void {
   const users = readUsers();
   if (users.length > 0) return;
@@ -91,10 +90,10 @@ export function getSession(): User | null {
 
 export type AuthResult = { ok: true; user: User } | { ok: false; error: string };
 
-export interface LoginOpts {
-  /** public site — rejects admin accounts (they belong in the control room) */
+interface LoginOpts {
+  /** Public site: admin accounts are not allowed here. */
   publicOnly?: boolean;
-  /** control room — rejects non-admin accounts */
+  /** Control room: only admin accounts are allowed. */
   requireAdmin?: boolean;
 }
 
@@ -107,9 +106,9 @@ export function login(username: string, password: string, opts: LoginOpts = {}):
   if (u.hash !== hashPassword(u.username, password))
     return { ok: false, error: "Wrong password — try again." };
   if (opts.publicOnly && u.role === "admin")
-    return { ok: false, error: "That account doesn't sign in here." };
+    return { ok: false, error: "That account doesn't sign in here — it belongs to the control room." };
   if (opts.requireAdmin && u.role !== "admin")
-    return { ok: false, error: "Members can't enter the control room — admin only." };
+    return { ok: false, error: "This area needs an admin account." };
   try {
     localStorage.setItem(SESSION_KEY, u.id);
   } catch {

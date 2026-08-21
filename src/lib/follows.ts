@@ -1,8 +1,7 @@
 import type { Offer } from "../types";
 
 /**
- * Per-user follow list. Keys are plain strings so they're trivially
- * serialisable and comparable:
+ * Per-user follow list. Keys are plain strings:
  *   card::Al Rajhi Bank::Visa Infinite
  *   vendor::Barn's Coffee
  */

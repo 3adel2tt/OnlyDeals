@@ -7,8 +7,8 @@ import { ArrowUpRight, CalendarIcon, StarIcon } from "./icons";
 interface Props {
   offer: Offer;
   index: number;
-  onOpen: (o: Offer) => void;
   followed: boolean;
+  onOpen: (o: Offer) => void;
   onToggleFollow: (o: Offer) => void;
 }
 
@@ -26,7 +26,7 @@ const STAMP: Record<Offer["kind"], string> = {
   installments: "border-2 border-term bg-paper text-ink",
 };
 
-export default function OfferTile({ offer, index, onOpen, followed, onToggleFollow }: Props) {
+export default function OfferTile({ offer, index, followed, onOpen, onToggleFollow }: Props) {
   const { ref, inView } = useReveal<HTMLDivElement>();
   const exp = expiryMeta(offer.expiresAt);
   const rotate = ["-rotate-2", "rotate-1", "-rotate-1", "rotate-2"][index % 4];
@@ -72,12 +72,12 @@ export default function OfferTile({ offer, index, onOpen, followed, onToggleFoll
               e.stopPropagation();
               onToggleFollow(offer);
             }}
-            title={followed ? `Unfollow ${offer.card}` : `Follow ${offer.card}`}
-            aria-label={followed ? "Unfollow" : "Follow"}
-            className={`absolute left-2.5 top-2.5 z-10 flex h-8 w-8 items-center justify-center rounded-full backdrop-blur-sm transition-all active:scale-90 ${
+            title={followed ? "Unfollow this card tier" : "Follow this card tier"}
+            aria-label={followed ? "Unfollow card tier" : "Follow card tier"}
+            className={`absolute left-2.5 top-2.5 flex h-8 w-8 items-center justify-center rounded-full backdrop-blur transition-all active:scale-90 ${
               followed
-                ? "star-pop bg-amber text-ink shadow-[0_4px_12px_-2px_rgba(232,185,62,0.9)]"
-                : "bg-term/55 text-paper hover:bg-term/80"
+                ? "star-pop bg-amber text-ink shadow-[0_3px_10px_-2px_rgba(232,185,62,0.8)]"
+                : "bg-term/50 text-paper hover:bg-amber hover:text-ink"
             }`}
           >
             <StarIcon filled={followed} className="h-4 w-4" />

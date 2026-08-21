@@ -8,7 +8,6 @@ import {
   CardIcon,
   ChevronRightIcon,
   CloseIcon,
-  LockIcon,
   SearchIcon,
   StarIcon,
   StoreIcon,
@@ -24,9 +23,10 @@ interface BankGroup {
   bank: string;
   count: number;
   cards: CardGroup[];
+  custom?: boolean;
 }
 
-interface VendorGroup {
+interface VendorRow {
   vendor: string;
   count: number;
   image: string;
@@ -35,8 +35,8 @@ interface VendorGroup {
 }
 
 const QUEUED_BANKS = [
-  { name: "SNB (AlAhli)", note: "scraper drafting · source 02" },
-  { name: "Riyad Bank", note: "queued · source 03" },
+  { name: "SNB (AlAhli)", note: "queued · source workflow pending" },
+  { name: "Riyad Bank", note: "queued · source workflow pending" },
   { name: "Tamara", note: "queued · BNPL deals feed" },
   { name: "Amazon.sa", note: "queued · bank-code tracking" },
 ];
@@ -81,6 +81,9 @@ export default function BrowseDrawer({
     };
   }, [open, onClose]);
 
+  const customBanks = useMemo(() => custom.filter((c) => c.kind === "bank"), [custom]);
+  const customVendors = useMemo(() => custom.filter((c) => c.kind === "vendor"), [custom]);
+
   const bankGroups = useMemo<BankGroup[]>(() => {
     const banks = new Map<string, Map<string, Offer[]>>();
     for (const o of offers) {
@@ -89,7 +92,7 @@ export default function BrowseDrawer({
       if (!cards.has(o.card)) cards.set(o.card, []);
       cards.get(o.card)!.push(o);
     }
-    return Array.from(banks.entries()).map(([bank, cards]) => ({
+    const rows: BankGroup[] = Array.from(banks.entries()).map(([bank, cards]) => ({
       bank,
       count: Array.from(cards.values()).reduce((n, list) => n + list.length, 0),
       cards: Array.from(cards.entries())
@@ -100,21 +103,21 @@ export default function BrowseDrawer({
         }))
         .sort((a, b) => b.count - a.count),
     }));
-  }, [offers]);
+    for (const r of customBanks) {
+      if (!rows.some((b) => b.bank === r.name)) {
+        rows.push({ bank: r.name, count: 0, cards: [], custom: true });
+      }
+    }
+    return rows;
+  }, [offers, customBanks]);
 
-  const customBanks = useMemo(() => custom.filter((c) => c.kind === "bank"), [custom]);
-  const customVendors = useMemo(() => custom.filter((c) => c.kind === "vendor"), [custom]);
-
-  const indexedCount = (name: string) =>
-    offers.filter((o) => o.bank === name || o.merchant === name).length;
-
-  const allVendors = useMemo<VendorGroup[]>(() => {
+  const allVendors = useMemo<VendorRow[]>(() => {
     const map = new Map<string, Offer[]>();
     for (const o of offers) {
       if (!map.has(o.merchant)) map.set(o.merchant, []);
       map.get(o.merchant)!.push(o);
     }
-    const rows: VendorGroup[] = Array.from(map.entries())
+    const rows: VendorRow[] = Array.from(map.entries())
       .map(([vendor, list]) => ({
         vendor,
         count: list.length,
@@ -123,7 +126,7 @@ export default function BrowseDrawer({
       }))
       .sort((a, b) => b.count - a.count || a.vendor.localeCompare(b.vendor));
     for (const r of customVendors) {
-      if (!rows.some((v) => v.vendor.toLowerCase() === r.name.toLowerCase())) {
+      if (!rows.some((v) => v.vendor === r.name)) {
         rows.push({
           vendor: r.name,
           count: 0,
@@ -184,7 +187,7 @@ export default function BrowseDrawer({
         </div>
 
         {/* mode switch */}
-        <div className="mx-5 mt-4 grid grid-cols-2 gap-1 rounded-lg border border-term-line bg-[#120d0c] p-1">
+        <div className="mx-5 mt-4 grid grid-cols-2 gap-1 rounded-lg border border-term-line bg-[#100c0c] p-1">
           {(
             [
               { id: "banks", label: "By bank", Icon: BankIcon },
@@ -212,85 +215,66 @@ export default function BrowseDrawer({
           {tab === "banks" && !drilled && (
             <div className="space-y-1.5">
               {bankGroups.map((b, i) => (
-                <button
+                <div
                   key={b.bank}
-                  onClick={() => setDrillBank(b.bank)}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => (b.count > 0 ? setDrillBank(b.bank) : onLocked(b.bank))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      b.count > 0 ? setDrillBank(b.bank) : onLocked(b.bank);
+                    }
+                  }}
                   style={{ animationDelay: `${i * 45}ms` }}
-                  className={`row-in group flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left transition-all hover:translate-x-1 ${
+                  className={`row-in group flex w-full cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 text-left transition-all hover:translate-x-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flare ${
                     (active.type === "bank-card" || active.type === "bank") && active.bank === b.bank
                       ? "border-flare/50 bg-flare/10"
-                      : "border-term-line bg-[#1f1412] hover:border-flare/40"
+                      : b.custom
+                        ? "border-dashed border-term-line bg-transparent hover:border-flare/40"
+                        : "border-term-line bg-[#1f1412] hover:border-flare/40"
                   }`}
                 >
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-flare/30 bg-flare/10 font-display text-[13px] font-extrabold text-flare">
                     {initials(b.bank)}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-display text-[14.5px] font-bold tracking-tight">
+                    <span className={`block truncate font-display text-[14.5px] font-bold tracking-tight ${b.custom ? "text-[#d8c8c2]" : ""}`}>
                       {b.bank}
                     </span>
                     <span className="mt-0.5 flex items-center gap-1.5 font-mono text-[9.5px] uppercase tracking-[0.12em] text-[#8f766f]">
-                      <span className="relative inline-block h-1.5 w-1.5 rounded-full bg-live text-live ping-dot" />
-                      live source · {b.cards.length} cards
+                      {b.count > 0 ? (
+                        <>
+                          <span className="relative inline-block h-1.5 w-1.5 rounded-full bg-live text-live ping-dot" />
+                          in the feed · {b.cards.length} cards
+                        </>
+                      ) : (
+                        "registered · engine pending"
+                      )}
                     </span>
                   </span>
-                  <span className="rounded-full bg-flare/15 px-2 py-0.5 font-mono text-[10px] font-semibold text-flare">
-                    {b.count}
-                  </span>
+                  {b.count > 0 && (
+                    <span className="rounded-full bg-flare/15 px-2 py-0.5 font-mono text-[10px] font-semibold text-flare">
+                      {b.count}
+                    </span>
+                  )}
                   <ChevronRightIcon className="h-3.5 w-3.5 text-[#6b544e] transition-transform group-hover:translate-x-0.5 group-hover:text-flare" />
-                </button>
+                </div>
               ))}
 
               {offers.length === 0 && (
                 <p className="px-2 py-6 text-center font-mono text-[11px] text-[#6b544e]">
-                  Waiting for the first scrape pass…
+                  Waiting for the first feed sync…
                   <span className="caret ml-1 inline-block h-[11px] w-[6px] translate-y-[1px] bg-flare" />
                 </p>
-              )}
-
-              {customBanks.length > 0 && (
-                <>
-                  <p className="px-2 pb-1 pt-4 font-mono text-[9.5px] uppercase tracking-[0.2em] text-[#6b544e]">
-                    ── your registry
-                  </p>
-                  {customBanks.map((c, i) => {
-                    const n = indexedCount(c.name);
-                    const isActive = active.type === "bank" && active.bank === c.name;
-                    return (
-                      <button
-                        key={c.id}
-                        onClick={() => onApply({ type: "bank", bank: c.name })}
-                        style={{ animationDelay: `${(i + 1) * 45}ms` }}
-                        className={`row-in group flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-all hover:translate-x-1 ${
-                          isActive
-                            ? "border-flare/50 bg-flare/10"
-                            : "border-dashed border-term-line bg-transparent hover:border-flare/40"
-                        }`}
-                      >
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-term-line bg-[#1f1412] font-display text-[11px] font-extrabold text-[#8f766f]">
-                          {initials(c.name)}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate font-display text-[13.5px] font-bold tracking-tight text-[#d8c8c2]">
-                            {c.name}
-                          </span>
-                          <span className="block font-mono text-[9px] uppercase tracking-[0.12em] text-[#6b544e]">
-                            {n > 0 ? `${n} offers indexed` : "registered · engine pending"}
-                          </span>
-                        </span>
-                        <span className="rounded-full border border-flare/40 bg-flare/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-flare">
-                          registered
-                        </span>
-                      </button>
-                    );
-                  })}
-                </>
               )}
 
               <p className="px-2 pb-1 pt-4 font-mono text-[9.5px] uppercase tracking-[0.2em] text-[#6b544e]">
                 ── in the pipeline
               </p>
-              {QUEUED_BANKS.map((b, i) => (
+              {QUEUED_BANKS.filter(
+                (q) => !bankGroups.some((b) => b.bank === q.name) && !customBanks.some((c) => c.name === q.name),
+              ).map((b, i) => (
                 <button
                   key={b.name}
                   onClick={() => onLocked(b.name)}
@@ -381,13 +365,16 @@ export default function BrowseDrawer({
                           )}
                         </span>
                       </span>
+                      <span className="font-mono text-[10px] font-semibold text-flare">
+                        {c.count} offer{c.count > 1 ? "s" : ""}
+                      </span>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           onToggleCard(drilled.bank, c.card);
                         }}
-                        title={followed ? "Unfollow this card" : "Follow this card tier"}
-                        aria-label={followed ? "Unfollow card" : "Follow card"}
+                        title={followed ? "Unfollow this card tier" : "Follow this card tier"}
+                        aria-label={followed ? "Unfollow card tier" : "Follow card tier"}
                         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all active:scale-90 ${
                           followed
                             ? "star-pop bg-amber text-ink shadow-[0_3px_10px_-2px_rgba(232,185,62,0.8)]"
@@ -396,9 +383,6 @@ export default function BrowseDrawer({
                       >
                         <StarIcon filled={followed} className="h-3.5 w-3.5" />
                       </button>
-                      <span className="font-mono text-[10px] font-semibold text-flare">
-                        {c.count} offer{c.count > 1 ? "s" : ""}
-                      </span>
                       <ChevronRightIcon className="h-3.5 w-3.5 text-[#6b544e] transition-transform group-hover:translate-x-0.5 group-hover:text-flare" />
                     </div>
                   );
@@ -423,7 +407,7 @@ export default function BrowseDrawer({
                   value={vendorQuery}
                   onChange={(e) => setVendorQuery(e.target.value)}
                   placeholder="Filter vendors…"
-                  className="w-full rounded-lg border border-term-line bg-[#120d0c] py-2 pl-9 pr-3 font-mono text-[11.5px] text-paper placeholder:text-[#6b544e] focus:border-flare/50 focus:outline-none"
+                  className="w-full rounded-lg border border-term-line bg-[#100c0c] py-2 pl-9 pr-3 font-mono text-[11.5px] text-paper placeholder:text-[#6b544e] focus:border-flare/50 focus:outline-none"
                 />
               </div>
 
@@ -459,7 +443,7 @@ export default function BrowseDrawer({
                           className="h-10 w-10 shrink-0 rounded-md border border-term-line object-cover transition-transform duration-300 group-hover:scale-105"
                         />
                       ) : (
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-term-line bg-[#120d0c] font-display text-[12px] font-extrabold text-[#6b544e]">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-term-line bg-[#100c0c] font-display text-[12px] font-extrabold text-[#6b544e]">
                           {initials(v.vendor)}
                         </span>
                       )}
@@ -511,12 +495,8 @@ export default function BrowseDrawer({
 
         {/* foot */}
         <div className="border-t border-term-line px-5 py-3">
-          <p className="flex items-center justify-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-[#8f766f]">
-            <LockIcon className="h-3 w-3 shrink-0" />
-            source registry lives in the control room
-          </p>
-          <p className="mt-1 text-center font-mono text-[9px] uppercase tracking-[0.16em] text-[#6b544e]">
-            {custom.length} registered · schema offer.v1 · fed by n8n
+          <p className="text-center font-mono text-[9px] uppercase tracking-[0.16em] text-[#6b544e]">
+            scraping runs on n8n — register sources from the control room
           </p>
         </div>
       </aside>
