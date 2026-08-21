@@ -7,7 +7,7 @@
       "type": "source",
       "file": "onlydeals-alrajhi.workflow.json",
       "webhook": "onlydeals-alrajhi",
-      "description": "Webhook → fetch card-offers page → regex extraction → offer.v1 payload → POST to ingest → audit row to Google Sheets."
+      "description": "Webhook → fetch card-offers page → regex extraction → offer.v1 payload → flatten → upsert into Postgres."
     },
     {
       "id": "jarir",
@@ -15,7 +15,7 @@
       "type": "source",
       "file": "onlydeals-jarir.workflow.json",
       "webhook": "onlydeals-jarir",
-      "description": "Jarir offers page, percent + 0%-installments patterns, same offer.v1 payload + Sheets audit row."
+      "description": "Webhook → Jarir offers page, percent + 0%-installments patterns → flatten → upsert into Postgres."
     },
     {
       "id": "alinma",
