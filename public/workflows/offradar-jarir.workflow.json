@@ -1,0 +1,130 @@
+{
+  "name": "Offradar · Source · Jarir",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "offradar-jarir",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "jr-01-webhook",
+      "name": "Trigger (admin / master scheduler)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "offradar-jarir"
+    },
+    {
+      "parameters": {
+        "url": "https://www.jarir.com/sa-en/offers",
+        "options": {
+          "response": { "response": { "responseFormat": "text" } },
+          "timeout": 20000
+        }
+      },
+      "id": "jr-02-fetch",
+      "name": "Fetch offers page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = $input.first().json.data ?? \"\";\nconst clean = html\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, \" \")\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, \" \")\n  .replace(/<[^>]+>/g, \" \")\n  .replace(/&nbsp;|&#160;/g, \" \")\n  .replace(/\\s+/g, \" \")\n  .trim();\nconst offers = [];\nconst seen = new Set();\nconst pct = /([A-Z][A-Za-z0-9'&.\\- ]{3,60}?)\\s*(?:[-\\u2013\\u2014:|]\\s*)?(?:up\\s+to\\s+)?(\\d{1,2})\\s*%\\s*(off|discount)?/gi;\nlet m;\nwhile ((m = pct.exec(clean)) !== null && offers.length < 15) {\n  const merchant = m[1].trim().split(/\\s{2,}/)[0].slice(0, 32);\n  const key = merchant.toLowerCase();\n  if (seen.has(key) || merchant.length < 3) continue;\n  seen.add(key);\n  offers.push({ merchant, value: Number(m[2]), kind: \"percent\" });\n}\nconst installments = /0%\\s*(?:installments?|for)\\s*(\\d{1,2})\\s*months?/gi;\nwhile ((m = installments.exec(clean)) !== null && offers.length < 20) {\n  offers.push({ merchant: \"Jarir installments\", value: Number(m[1]), kind: \"installments\" });\n}\nreturn [{ json: { offers, pageChars: clean.length } }];"
+      },
+      "id": "jr-03-extract",
+      "name": "Extract offers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const TARGET = \"https://www.jarir.com/sa-en/offers\";\nconst { offers, pageChars } = $input.first().json;\nconst now = new Date();\nconst norm = offers.map((o, i) => ({\n  id: \"jarir-\" + now.getTime().toString(36) + \"-\" + i,\n  merchant: \"Jarir\",\n  headline: o.kind === \"installments\"\n    ? \"0% installments for \" + o.value + \" months \\u2014 \" + o.merchant\n    : o.merchant + \" \\u2014 \" + o.value + \"% off with linked bank cards\",\n  discountLabel: o.kind === \"installments\" ? \"0% \\u00d7\" + o.value : \"\\u2212\" + o.value + \"%\",\n  value: o.value,\n  kind: o.kind === \"installments\" ? \"installments\" : \"percent\",\n  category: \"electronics\",\n  bank: \"Jarir\",\n  card: \"All bank cards\",\n  image: \"\",\n  cards: [\"All bank cards\"],\n  link: TARGET,\n  expiresAt: null,\n  terms: [\"Parsed by the offradar-jarir n8n workflow \\u2014 open the link for full terms.\"]\n}));\nconst payload = {\n  version: \"offer.v1\",\n  generatedAt: now.toISOString(),\n  generator: \"n8n:offradar-jarir\",\n  sources: [{\n    id: \"jarir\",\n    name: \"Jarir\",\n    status: norm.length ? \"live\" : \"error\",\n    count: norm.length,\n    note: norm.length + \" offers \\u00b7 html regex \\u00b7 \" + pageChars + \" chars parsed\",\n    at: now.getTime()\n  }],\n  offers: norm\n};\nreturn [{ json: { payload, count: norm.length } }];"
+      },
+      "id": "jr-04-build",
+      "name": "Build offer.v1 payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "jr-if-count",
+              "leftValue": "={{ $json.count }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "jr-05-if",
+      "name": "Has offers?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.OFFRADAR_INGEST_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "x-api-key", "value": "={{ $env.OFFRADAR_API_KEY }}" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "jr-06-ingest",
+      "name": "POST to ingest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "const count = $(\"Build offer.v1 payload\").first().json.count;\nreturn [{ json: { ok: true, source: \"jarir\", offers: count, pushedToIngest: true, at: new Date().toISOString() } }];"
+      },
+      "id": "jr-07-summary",
+      "name": "Summary (webhook reply)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ok: false, source: \"jarir\", offers: 0, reason: \"no offer patterns found on the page \\u2014 selectors may need an update\", at: new Date().toISOString() } }];"
+      },
+      "id": "jr-08-empty",
+      "name": "Empty result (webhook reply)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 420]
+    }
+  ],
+  "connections": {
+    "Trigger (admin / master scheduler)": { "main": [[{ "node": "Fetch offers page", "type": "main", "index": 0 }]] },
+    "Fetch offers page": { "main": [[{ "node": "Extract offers", "type": "main", "index": 0 }]] },
+    "Extract offers": { "main": [[{ "node": "Build offer.v1 payload", "type": "main", "index": 0 }]] },
+    "Build offer.v1 payload": { "main": [[{ "node": "Has offers?", "type": "main", "index": 0 }]] },
+    "Has offers?": {
+      "main": [
+        [{ "node": "POST to ingest", "type": "main", "index": 0 }],
+        [{ "node": "Empty result (webhook reply)", "type": "main", "index": 0 }]
+      ]
+    },
+    "POST to ingest": { "main": [[{ "node": "Summary (webhook reply)", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "meta": { "templateCredsSetupCompleted": false }
+}
