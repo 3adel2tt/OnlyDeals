@@ -66,11 +66,12 @@ interface ManifestFile {
   }>;
 }
 
-function saveRegistry(list: CustomSource[]) {
+function loadWebhooks(): Record<string, string> {
   try {
-    localStorage.setItem(REGISTRY_KEY, JSON.stringify(list));
+    const raw = localStorage.getItem(WEBHOOKS_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, string>) : {};
   } catch {
-    /* ignore */
+    return {};
   }
 }
 
