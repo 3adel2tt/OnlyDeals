@@ -1,0 +1,23 @@
+[Unit]
+Description=onlydeals DB-backed feed service
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=onlydeals
+Group=onlydeals
+# API key for the admin DB endpoints (same value n8n sends as x-api-key)
+EnvironmentFile=/etc/onlydeals/ingest.env
+Environment=FEED_PORT=8788
+Environment=DB_CONFIG=/etc/onlydeals/db.json
+WorkingDirectory=/opt/onlydeals
+ExecStart=/usr/bin/node /opt/onlydeals/feed-service.mjs
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=full
+ReadWritePaths=/etc/onlydeals
+
+[Install]
+WantedBy=multi-user.target
