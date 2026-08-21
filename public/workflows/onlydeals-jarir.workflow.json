@@ -73,54 +73,54 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "={{ $env.OFFRADAR_INGEST_URL }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [{ "name": "x-api-key", "value": "={{ $env.OFFRADAR_API_KEY }}" }]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.payload) }}",
-        "options": { "timeout": 15000 }
+        "jsCode": "const { payload } = $input.first().json;\nconst rows = (payload.offers || []).map((o) => ({\n  json: {\n    merchant_id: String(o.merchant || \"jarir\").toLowerCase().trim().replace(/[^a-z0-9]+/g, \"-\").replace(/^-+|-+$/g, \"\"),\n    source: \"jarir\",\n    source_type: \"vendor\",\n    card_name: o.card || \"All bank cards\",\n    offer_title: o.merchant || \"Jarir offer\",\n    description: o.headline || \"\",\n    discount_value: o.discountLabel || (o.value ? o.value + \"%\" : \"\"),\n    discount_type: o.kind === \"percent\" || o.kind === \"cashback\" ? \"percentage\" : \"fixed\",\n    max_discount: typeof o.value === \"number\" ? o.value : null,\n    end_date: o.expiresAt ? o.expiresAt.slice(0, 10) : null,\n    terms_url: o.link || \"\",\n    image_url: o.image || null,\n    active: true\n  }\n}));\nreturn rows;"
       },
-      "id": "jr-06-ingest",
-      "name": "POST to ingest",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "id": "jr-20-flatten",
+      "name": "Flatten offers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [1340, 220]
     },
     {
       "parameters": {
-        "jsCode": "const p = $('Build offer.v1 payload').first().json.payload;\nconst s = (p.sources && p.sources[0]) || {};\nreturn [{ json: { timestamp: p.generatedAt, source: s.id || '', offers: s.count || 0, status: s.status || '', generator: p.generator } }];"
-      },
-      "id": "jr-10-row",
-      "name": "Run row",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1560, 220]
-    },
-    {
-      "parameters": {
-        "operation": "append",
-        "documentId": { "__rl": true, "value": "PASTE_SPREADSHEET_ID", "mode": "id" },
-        "sheetName": { "__rl": true, "value": "runs", "mode": "name" },
-        "columns": { "mappingMode": "autoMapInputData", "value": {}, "matchingColumns": [] },
+        "operation": "upsert",
+        "schema": { "__rl": true, "mode": "list", "value": "public" },
+        "table": { "__rl": true, "value": "offers", "mode": "list", "cachedResultName": "offers" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "merchant_id": "={{ $json.merchant_id }}",
+            "source": "={{ $json.source }}",
+            "source_type": "={{ $json.source_type }}",
+            "card_name": "={{ $json.card_name }}",
+            "offer_title": "={{ $json.offer_title }}",
+            "description": "={{ $json.description }}",
+            "discount_value": "={{ $json.discount_value }}",
+            "discount_type": "={{ $json.discount_type }}",
+            "max_discount": "={{ $json.max_discount }}",
+            "end_date": "={{ $json.end_date }}",
+            "terms_url": "={{ $json.terms_url }}",
+            "image_url": "={{ $json.image_url }}",
+            "active": "={{ $json.active }}"
+          },
+          "matchingColumns": ["merchant_id", "source", "offer_title"],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
         "options": {}
       },
-      "id": "jr-11-sheets",
-      "name": "Log run to sheet",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.4,
-      "position": [1780, 220],
-      "continueOnFail": true,
+      "id": "jr-21-upsert",
+      "name": "Upsert offers",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1560, 220],
       "credentials": {
-        "googleSheetsOAuth2Api": { "id": "REPLACE_AFTER_IMPORT", "name": "onlydeals-sheets-sa" }
+        "postgres": { "id": "REPLACE_AFTER_IMPORT", "name": "Postgres account" }
       }
     },
     {
       "parameters": {
-        "jsCode": "const count = $(\"Build offer.v1 payload\").first().json.count;\nreturn [{ json: { ok: true, source: \"jarir\", offers: count, pushedToIngest: true, loggedToSheet: true, at: new Date().toISOString() } }];"
+        "jsCode": "const count = $(\"Build offer.v1 payload\").first().json.count;\nreturn [{ json: { ok: true, source: \"jarir\", offers: count, writtenToPostgres: true, at: new Date().toISOString() } }];"
       },
       "id": "jr-07-summary",
       "name": "Summary (webhook reply)",
@@ -146,13 +146,12 @@
     "Build offer.v1 payload": { "main": [[{ "node": "Has offers?", "type": "main", "index": 0 }]] },
     "Has offers?": {
       "main": [
-        [{ "node": "POST to ingest", "type": "main", "index": 0 }],
+        [{ "node": "Flatten offers", "type": "main", "index": 0 }],
         [{ "node": "Empty result (webhook reply)", "type": "main", "index": 0 }]
       ]
     },
-    "POST to ingest": { "main": [[{ "node": "Run row", "type": "main", "index": 0 }]] },
-    "Run row": { "main": [[{ "node": "Log run to sheet", "type": "main", "index": 0 }]] },
-    "Log run to sheet": { "main": [[{ "node": "Summary (webhook reply)", "type": "main", "index": 0 }]] }
+    "Flatten offers": { "main": [[{ "node": "Upsert offers", "type": "main", "index": 0 }]] },
+    "Upsert offers": { "main": [[{ "node": "Summary (webhook reply)", "type": "main", "index": 0 }]] }
   },
   "settings": { "executionOrder": "v1" },
   "pinData": {},
