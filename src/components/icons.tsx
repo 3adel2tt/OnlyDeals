@@ -2,20 +2,25 @@ interface P {
   className?: string;
 }
 
-/** Deal tag with a % sign — the static onlydeals mark. */
+/**
+ * Deal tag with a % sign — the static onlydeals mark.
+ * currentColor for the neutral strokes (adapts via text color), one fixed
+ * coral accent that reads on both themes. No CSS vars → nothing to break
+ * when the theme toggles.
+ */
 export function BrandMark({ className = "w-8 h-8" }: P) {
   return (
     <svg viewBox="0 0 32 32" className={className} fill="none" aria-hidden="true">
       <path
         d="M3.2 15.2 14.4 4a2.4 2.4 0 0 1 1.7-.7H26a2.8 2.8 0 0 1 2.8 2.8v9.9a2.4 2.4 0 0 1-.7 1.7L16.9 28.9a2.6 2.6 0 0 1-3.7 0L3.2 18.9a2.6 2.6 0 0 1 0-3.7Z"
-        stroke="var(--color-brick)"
+        stroke="currentColor"
         strokeWidth="2.4"
         strokeLinejoin="round"
       />
-      <circle cx="8.4" cy="15.2" r="1.7" fill="var(--color-brick)" />
-      <path d="M23.2 9.8 14.8 21.4" stroke="var(--color-ink)" strokeWidth="2.2" strokeLinecap="round" />
-      <circle cx="15.3" cy="10.7" r="2.4" stroke="var(--color-ink)" strokeWidth="2" />
-      <circle cx="22.6" cy="20.4" r="2.4" stroke="var(--color-ink)" strokeWidth="2" />
+      <circle cx="8.4" cy="15.2" r="1.7" fill="currentColor" />
+      <path d="M23.2 9.8 14.8 21.4" stroke="#E8442E" strokeWidth="2.3" strokeLinecap="round" />
+      <circle cx="15.3" cy="10.7" r="2.4" stroke="#E8442E" strokeWidth="2" />
+      <circle cx="22.6" cy="20.4" r="2.4" stroke="#E8442E" strokeWidth="2" />
     </svg>
   );
 }
@@ -108,6 +113,14 @@ export function ChevronRightIcon({ className = "w-4 h-4" }: P) {
   return (
     <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="m7.5 4 6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function ChevronLeftIcon({ className = "w-4 h-4" }: P) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="m12.5 4-6 6 6 6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

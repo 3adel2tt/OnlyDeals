@@ -13,7 +13,8 @@ import type { FeedPayload, FeedProvenance, Offer } from "../types";
  * offers produced by the n8n pipeline.
  */
 
-export const FEED_URL: string | null = null;
+/** Pinned permanently — the feed service serves the merged feed here. */
+export const FEED_URL = "/onlydeals.json";
 
 const LOCAL_KEY = "onlydeals:feed:v2";
 const REMOTE_TIMEOUT_MS = 6000;

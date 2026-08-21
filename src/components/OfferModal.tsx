@@ -26,7 +26,7 @@ interface Props {
 
 const TONE_TEXT: Record<string, string> = {
   hot: "text-ember",
-  warm: "text-[#a3740c]",
+  warm: "text-amber",
   ok: "text-brick",
   open: "text-ink-faint",
 };
@@ -65,14 +65,19 @@ export default function OfferModal({
   };
 
   return (
-    <div className="fade-in fixed inset-0 z-50 flex items-end justify-center bg-term/60 p-0 backdrop-blur-[3px] sm:items-center sm:p-6" onClick={onClose} role="dialog" aria-modal="true">
+    <div
+      className="fade-in fixed inset-0 z-50 flex items-end justify-center bg-term/60 p-0 backdrop-blur-[3px] sm:items-center sm:p-6"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
       <div
         className="modal-pop relative max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-t-2xl border border-line bg-card shadow-2xl sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={onClose}
-          className="absolute right-3 top-3 z-10 rounded-full bg-term/70 p-2 text-paper backdrop-blur transition-all hover:rotate-90 hover:bg-ember"
+          className="absolute right-3 top-3 z-10 rounded-full bg-scrim/70 p-2 text-scrim-ink backdrop-blur transition-all hover:rotate-90 hover:bg-ember"
           aria-label="Close details"
         >
           <CloseIcon />
@@ -80,7 +85,7 @@ export default function OfferModal({
 
         <div className="grid md:grid-cols-[1.05fr_1fr]">
           {/* image side */}
-          <div className="relative h-52 sm:h-64 md:h-auto md:min-h-[500px]">
+          <div className="relative h-52 sm:h-64 md:h-auto md:min-h-[480px]">
             {offer.image ? (
               <img src={offer.image} alt={offer.merchant} className="absolute inset-0 h-full w-full object-cover" />
             ) : (
@@ -88,13 +93,13 @@ export default function OfferModal({
                 {offer.merchant.slice(0, 2).toUpperCase()}
               </div>
             )}
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-term/85 via-term/35 to-transparent p-4 pt-12">
-              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-flare">
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-scrim/90 via-scrim/45 to-transparent p-4 pt-12">
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-scrim-accent">
                 {CATEGORY_LABEL[offer.category]} · {offer.bank} · {offer.card}
               </p>
-              <h2 className="mt-1 font-display text-3xl font-extrabold tracking-tight text-paper">
+              <h2 className="mt-1 font-display text-3xl font-extrabold tracking-tight text-scrim-ink">
                 {offer.discountLabel}
-                <span className="ml-2 align-middle text-lg font-bold text-paper/85">{offer.merchant}</span>
+                <span className="ml-2 align-middle text-lg font-bold text-scrim-ink/85">{offer.merchant}</span>
               </h2>
             </div>
           </div>
@@ -126,8 +131,8 @@ export default function OfferModal({
                         {offer.code}
                       </code>
                       <button
-                        onClick={copyCode}
-                        className="rounded-full bg-ink px-3 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-paper transition-colors hover:bg-brick"
+                        onClick={() => void copyCode()}
+                        className="rounded-full bg-ink px-3 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-paper transition-colors hover:bg-brick hover:text-card"
                       >
                         Copy
                       </button>
@@ -157,7 +162,7 @@ export default function OfferModal({
                 onClick={() => onToggleCard(offer)}
                 className={`flex items-center justify-center gap-1.5 rounded-full border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] transition-all active:scale-95 ${
                   cardFollowed
-                    ? "star-pop border-amber bg-amber text-ink"
+                    ? "star-pop border-amber bg-amber text-card"
                     : "border-line bg-paper text-ink-soft hover:border-amber hover:text-ink"
                 }`}
               >
@@ -168,7 +173,7 @@ export default function OfferModal({
                 onClick={() => onToggleVendor(offer)}
                 className={`flex items-center justify-center gap-1.5 rounded-full border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] transition-all active:scale-95 ${
                   vendorFollowed
-                    ? "star-pop border-amber bg-amber text-ink"
+                    ? "star-pop border-amber bg-amber text-card"
                     : "border-line bg-paper text-ink-soft hover:border-amber hover:text-ink"
                 }`}
               >
@@ -198,14 +203,14 @@ export default function OfferModal({
                 href={offer.link}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group flex flex-1 items-center justify-center gap-2 rounded-full bg-brick px-5 py-2.5 font-mono text-[11.5px] font-medium uppercase tracking-[0.14em] text-paper transition-all hover:bg-ink active:scale-[0.98]"
+                className="group flex flex-1 items-center justify-center gap-2 rounded-full bg-brick px-5 py-2.5 font-mono text-[11.5px] font-medium uppercase tracking-[0.14em] text-card transition-all hover:opacity-90 active:scale-[0.98]"
               >
                 Open offer page
                 <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
               </a>
             </div>
             <p className="mt-2.5 text-center font-mono text-[9.5px] tracking-[0.1em] text-ink-faint">
-              {generator.toUpperCase()} · SYNCED {scrapedAt ? timeAgo(scrapedAt).toUpperCase() : "—"}
+              {generator.toUpperCase()} · SCRAPED {scrapedAt ? timeAgo(scrapedAt).toUpperCase() : "—"}
             </p>
           </div>
         </div>

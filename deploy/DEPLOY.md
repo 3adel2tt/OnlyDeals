@@ -1,108 +1,102 @@
-# onlydeals — deploy kit (Postgres is the source of truth)
+# onlydeals · deployment
 
-The old file-based ingest is retired. n8n source workflows now **upsert straight into
-Postgres**, and the **feed service** reads that table to build the offer.v1 feed the
-public site pulls. The DB credentials live only on the server (`/etc/onlydeals/db.json`,
-chmod 600) and are configured from the Control Room's **Database** page.
+Postgres is the source of truth. The **feed service** (`deploy/feed-service.mjs`)
+owns ALL database access; n8n workflows write offers through it or directly with
+their own Postgres credentials; the public site only ever reads `/onlydeals.json`.
 
-## Files
+## 1. Environment
 
-| file | goes to |
-|---|---|
-| `feed-service.mjs` | `/opt/onlydeals/feed-service.mjs` |
-| `onlydeals-feed.service` | `/etc/systemd/system/onlydeals-feed.service` |
-| `nginx-onlydeals.conf` | `/etc/nginx/sites-available/onlydeals` |
-| `schema.sql` | run against Postgres |
+| Variable                | Purpose                                                          | Default                          |
+| ----------------------- | ---------------------------------------------------------------- | -------------------------------- |
+| `ONLYDEALS_PG_URL`      | Postgres connection string (falls back to `DATABASE_URL`)        | —                                |
+| `ONLYDEALS_API_KEY`     | Guards `/api/db/*` (Control Room sends it as `x-api-key`)        | `change-me-api-key`              |
+| `SESSION_SECRET`        | HMAC secret for the signed httpOnly session cookie               | `change-me-session-secret`       |
+| `ONLYDEALS_REGISTRY`    | Trigger-URL registry file path                                   | `/etc/onlydeals/registry.json`   |
+| `ADMIN_EMAIL`           | Admin seeded on first boot (only if no admin exists)             | `admin@onlydel.com`              |
+| `ADMIN_PASSWORD`        | Password for the seeded admin                                    | `change-me-admin-123`            |
+| `PORT`                  | HTTP port                                                        | `8787`                           |
 
-## 1 — Database
+n8n-side config: a Postgres credential named `onlydeals-pg`
+(`ONLYDEALS_PG_URL`), the Google Sheets service-account credential
+`onlydeals-sheets-sa`, and env `ONLYDEALS_N8N_BASE`
+(`https://n8n.onlydel.com`) for the master scheduler's registry.
 
-```bash
-# create role + db, then the table
-sudo -u postgres psql -c "CREATE ROLE onlydeals LOGIN PASSWORD 'change-me';"
-sudo -u postgres psql -c "CREATE DATABASE onlydeals OWNER onlydeals;"
-PGPASSWORD=change-me psql -h localhost -U onlydeals -d onlydeals -f schema.sql
-```
+## 2. Database
 
-## 2 — Feed service
+**Zero manual migration.** On every boot the feed service runs
+`CREATE TABLE IF NOT EXISTS` for `offers` and `users` (mirrors
+`deploy/schema.sql` — keep both in sync if you change the schema).
 
-```bash
-useradd --system --no-create-home --shell /usr/sbin/nologin onlydeals 2>/dev/null || true
-mkdir -p /opt/onlydeals /etc/onlydeals
-cp feed-service.mjs /opt/onlydeals/
-cd /opt/onlydeals && npm init -y >/dev/null && npm i pg
+- `offers` — unique on `(source, ext_id)`; workflows upsert rows and refresh
+  `last_seen`, then prune with
+  `UPDATE offers SET active = false WHERE source = '<id>' AND active = true AND last_seen < now() - interval '12 hours'`.
+- `users` — `pass_hash` is `scrypt` (`<saltHex>:<hashHex>`, node:crypto — no
+  bcrypt dependency). Sessions are stateless signed cookies (7-day expiry,
+  httpOnly, SameSite=Lax).
 
-# API key protecting the admin DB endpoints — same value n8n sends as x-api-key
-echo "OFFRADAR_API_KEY=$(openssl rand -hex 32)" > /etc/onlydeals/ingest.env
-chmod 600 /etc/onlydeals/ingest.env
-cat /etc/onlydeals/ingest.env   # ← keep this for n8n + the Control Room
+## 3. Endpoints
 
-cp onlydeals-feed.service /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable --now onlydeals-feed
-curl -s localhost:8788/api/health        # → {"ok":true,"configured":false}
-```
-
-Now open the Control Room → **Database** tab, set the service base URL
-(`https://deals.your-domain.com`) + the API key, fill in host/port/database/user/
-password/table, hit **TEST CONNECTION** then **SAVE**. That writes `/etc/onlydeals/db.json`
-(chmod 600) — the password never touches the browser or the repo.
-
-## 3 — nginx
-
-```bash
-cp nginx-onlydeals.conf /etc/nginx/sites-available/onlydeals
-ln -sf /etc/nginx/sites-available/onlydeals /etc/nginx/sites-enabled/
-sed -i 's/deals.your-domain.com/YOUR_REAL_DOMAIN/' /etc/nginx/sites-available/onlydeals
-nginx -t && systemctl reload nginx
-# optional TLS:
-# certbot --nginx -d deals.your-domain.com
-```
-
-## 4 — Point the site at the feed
-
-In `src/lib/feed.ts`:
-
-```ts
-export const FEED_URL: string | null = "https://deals.your-domain.com/onlydeals.json";
-```
-
-Rebuild, drop `dist/` into `/var/www/onlydeals`.
-
-## 5 — n8n env vars
+Public (rate-limited, 20 / 10 min / IP):
 
 ```
-OFFRADAR_INGEST_URL = https://deals.your-domain.com/onlydeals.json   # feed the site reads
-OFFRADAR_API_KEY    = <hex from /etc/onlydeals/ingest.env>
-OFFRADAR_N8N_BASE   = https://n8n.your-domain.com
+POST /api/auth/register   {email, password, display_name} → 201 {user} + cookie
+POST /api/auth/login      {email, password}               → 200 {user} + cookie
+GET  /api/auth/me                                         → 200 {user} | 401
+POST /api/auth/logout                                     → clears cookie
+GET  /onlydeals.json                                      → merged offer.v1 feed (no-store)
 ```
 
-## 6 — n8n Postgres node: field mapping
-
-The source workflows' **Postgres upsert** node must write these columns (they match
-`schema.sql`, and the feed service reads them back into offer.v1):
-
-| Postgres column | value | → offer.v1 field |
-|---|---|---|
-| `merchant_id` | slug of merchant | (dedupe key) |
-| `source` | `alinma`, `jarir`, … | `bank` (capitalized) |
-| `source_type` | `bank` / `vendor` | — |
-| `card_name` | `Alinma Card` | `card` + `cards[]` |
-| `offer_title` | merchant / brand | `merchant` |
-| `description` | offer copy | `headline` |
-| `discount_value` | `20%` / `50 SAR` | `discountLabel` (`−20%`), `value` |
-| `discount_type` | `percentage` / `fixed` | `kind` (`percent` / `cashback`) |
-| `max_discount` | `200` | fallback `value` / "up to 200" |
-| `end_date` | `2026-12-31` | `expiresAt` (ISO) |
-| `terms_url` | link | `link` |
-| `image_url` | img | `image` |
-| `active` | `true` | row is included while true |
-
-Match columns for the upsert: `merchant_id`, `source`, `offer_title`
-(the `UNIQUE (merchant_id, source, offer_title)` constraint in schema.sql).
-
-## The loop
+Admin (`x-api-key: $ONLYDEALS_API_KEY`):
 
 ```
-n8n source workflow ──upsert──▶ Postgres.offers
-feed service ──SELECT──▶ offer.v1 JSON ──GET /onlydeals.json──▶ browser board
+GET    /api/db/users
+POST   /api/db/users/:id/reset-password  → { temp_password }  (shown once)
+POST   /api/db/users/:id/toggle          → flips `disabled`
+DELETE /api/db/users/:id
+GET    /api/db/registry                  → { base, webhooks }
+PUT    /api/db/registry                  → persist registry JSON
 ```
+
+## 4. Serving the frontend
+
+Build with `npm run build`, then serve `dist/` from the same origin as the
+feed service (nginx example):
+
+```nginx
+location = /adminn { try_files /index.html =404; }   # Control Room (SPA route)
+location /api/     { proxy_pass http://127.0.0.1:8787; }
+location = /onlydeals.json { proxy_pass http://127.0.0.1:8787; }
+location / { try_files $uri /index.html; }
+```
+
+`src/lib/feed.ts` pins `FEED_URL = "/onlydeals.json"` permanently — the site
+reads it on load and every 5 minutes. There is no manual sync button on the
+public site.
+
+## 5. n8n
+
+Import the three workflows from `public/workflows/` and activate:
+
+- `onlydeals-master-scheduler.workflow.json` — cron (06/12/18), fans out to
+  every source webhook in its registry, logs runs to Google Sheets, posts a
+  report.
+- `onlydeals-alrajhi.workflow.json` — fetch → extract (image JSON unwrap +
+  site-relative `src` absolutizing) → upsert into `offers` via SplitInBatches
+  → **Prune stale** (12 h window) → Sheets audit row.
+- `onlydeals-jarir.workflow.json` — same shape for Jarir.
+
+Set the `PASTE_SPREADSHEET_ID` placeholders and reconnect the
+`onlydeals-sheets-sa` Google Sheets credential (service-account JSON; share
+the sheet with its `client_email`).
+
+Scraping is triggered ONLY from the Control Room (`/adminn` → Workflows) or
+the master scheduler cron.
+
+## 6. Control Room
+
+`/adminn` on the public site. Admin-only (server checks `role = 'admin'`;
+`/api/db/*` additionally requires the API key, entered once per session and
+held in `sessionStorage` only). Tabs: Overview (registry, imports, ingest
+contract), Workflows (auto-discovered via `workflows/manifest.json` + ingest
+generator tags; trigger-only), Users (search, reset temporary password,
+disable/enable, delete).

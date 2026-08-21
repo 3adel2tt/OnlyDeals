@@ -41,7 +41,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const TARGET = \"https://www.jarir.com/sa-en/offers\";\nconst { offers, pageChars } = $input.first().json;\nconst now = new Date();\nconst norm = offers.map((o, i) => ({\n  id: \"jarir-\" + now.getTime().toString(36) + \"-\" + i,\n  merchant: \"Jarir\",\n  headline: o.kind === \"installments\"\n    ? \"0% installments for \" + o.value + \" months \\u2014 \" + o.merchant\n    : o.merchant + \" \\u2014 \" + o.value + \"% off with linked bank cards\",\n  discountLabel: o.kind === \"installments\" ? \"0% \\u00d7\" + o.value : \"\\u2212\" + o.value + \"%\",\n  value: o.value,\n  kind: o.kind === \"installments\" ? \"installments\" : \"percent\",\n  category: \"electronics\",\n  bank: \"Jarir\",\n  card: \"All bank cards\",\n  image: \"\",\n  cards: [\"All bank cards\"],\n  link: TARGET,\n  expiresAt: null,\n  terms: [\"Parsed by the onlydeals-jarir n8n workflow \\u2014 open the link for full terms.\"]\n}));\nconst payload = {\n  version: \"offer.v1\",\n  generatedAt: now.toISOString(),\n  generator: \"n8n:onlydeals-jarir\",\n  sources: [{\n    id: \"jarir\",\n    name: \"Jarir\",\n    status: norm.length ? \"live\" : \"error\",\n    count: norm.length,\n    note: norm.length + \" offers \\u00b7 html regex \\u00b7 \" + pageChars + \" chars parsed\",\n    at: now.getTime()\n  }],\n  offers: norm\n};\nreturn [{ json: { payload, count: norm.length } }];"
+        "jsCode": "const TARGET = \"https://www.jarir.com/sa-en/offers\";\nconst { offers, pageChars } = $input.first().json;\nconst now = new Date();\nconst norm = offers.map((o, i) => ({\n  ext_id: o.merchant.toLowerCase().replace(/[^a-z0-9]+/g, \"-\").slice(0, 48) + \"-\" + o.kind + \"-\" + o.value,\n  merchant: \"Jarir\",\n  headline: o.kind === \"installments\"\n    ? \"0% installments for \" + o.value + \" months \\u2014 \" + o.merchant\n    : o.merchant + \" \\u2014 \" + o.value + \"% off with linked bank cards\",\n  discount_label: o.kind === \"installments\" ? \"0% \\u00d7\" + o.value : \"\\u2212\" + o.value + \"%\",\n  value: o.value,\n  kind: o.kind === \"installments\" ? \"installments\" : \"percent\",\n  category: \"electronics\",\n  bank: \"Jarir\",\n  card: \"All bank cards\",\n  image: \"\",\n  cards: [\"All bank cards\"],\n  link: TARGET,\n  expires_at: null,\n  terms: [\"Parsed by the onlydeals-jarir n8n workflow \\u2014 open the link for full terms.\"],\n  last_seen: now.toISOString()\n}));\nconst payload = {\n  version: \"offer.v1\",\n  generatedAt: now.toISOString(),\n  generator: \"n8n:onlydeals-jarir\",\n  sources: [{\n    id: \"jarir\",\n    name: \"Jarir\",\n    status: norm.length ? \"live\" : \"error\",\n    count: norm.length,\n    note: norm.length + \" offers \\u00b7 html regex \\u00b7 \" + pageChars + \" chars parsed\",\n    at: now.getTime()\n  }],\n  offers: norm\n};\nreturn [{ json: { items: norm, payload, count: norm.length } }];"
       },
       "id": "jr-04-build",
       "name": "Build offer.v1 payload",
@@ -51,107 +51,110 @@
     },
     {
       "parameters": {
-        "conditions": {
-          "options": { "caseSensitive": true, "typeValidation": "loose" },
-          "combinator": "and",
-          "conditions": [
-            {
-              "id": "jr-if-count",
-              "leftValue": "={{ $json.count }}",
-              "rightValue": 0,
-              "operator": { "type": "number", "operation": "gt" }
-            }
-          ]
-        },
-        "options": {}
+        "jsCode": "// flatten output — one item per offer row, each carrying last_seen\nconst { items } = $input.first().json;\nreturn items.map(o => ({ json: o }));"
       },
-      "id": "jr-05-if",
-      "name": "Has offers?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
+      "id": "jr-05-flatten",
+      "name": "Flatten offers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [1120, 300]
     },
     {
       "parameters": {
-        "jsCode": "const { payload } = $input.first().json;\nconst rows = (payload.offers || []).map((o) => ({\n  json: {\n    merchant_id: String(o.merchant || \"jarir\").toLowerCase().trim().replace(/[^a-z0-9]+/g, \"-\").replace(/^-+|-+$/g, \"\"),\n    source: \"jarir\",\n    source_type: \"vendor\",\n    card_name: o.card || \"All bank cards\",\n    offer_title: o.merchant || \"Jarir offer\",\n    description: o.headline || \"\",\n    discount_value: o.discountLabel || (o.value ? o.value + \"%\" : \"\"),\n    discount_type: o.kind === \"percent\" || o.kind === \"cashback\" ? \"percentage\" : \"fixed\",\n    max_discount: typeof o.value === \"number\" ? o.value : null,\n    end_date: o.expiresAt ? o.expiresAt.slice(0, 10) : null,\n    terms_url: o.link || \"\",\n    image_url: o.image || null,\n    active: true\n  }\n}));\nreturn rows;"
+        "batchSize": 25,
+        "options": {}
       },
-      "id": "jr-20-flatten",
-      "name": "Flatten offers",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1340, 220]
+      "id": "jr-06-batch",
+      "name": "Batch DB writes",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1340, 300]
     },
     {
       "parameters": {
-        "operation": "upsert",
-        "schema": { "__rl": true, "mode": "list", "value": "public" },
-        "table": { "__rl": true, "value": "offers", "mode": "list", "cachedResultName": "offers" },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "merchant_id": "={{ $json.merchant_id }}",
-            "source": "={{ $json.source }}",
-            "source_type": "={{ $json.source_type }}",
-            "card_name": "={{ $json.card_name }}",
-            "offer_title": "={{ $json.offer_title }}",
-            "description": "={{ $json.description }}",
-            "discount_value": "={{ $json.discount_value }}",
-            "discount_type": "={{ $json.discount_type }}",
-            "max_discount": "={{ $json.max_discount }}",
-            "end_date": "={{ $json.end_date }}",
-            "terms_url": "={{ $json.terms_url }}",
-            "image_url": "={{ $json.image_url }}",
-            "active": "={{ $json.active }}"
-          },
-          "matchingColumns": ["merchant_id", "source", "offer_title"],
-          "attemptToConvertTypes": false,
-          "convertFieldsToString": false
-        },
+        "operation": "executeQuery",
+        "query": "INSERT INTO offers (source, ext_id, merchant, headline, discount_label, value, kind, category, bank, card, image, cards, link, expires_at, terms, last_seen, active)\nVALUES ('jarir', '{{ $json.ext_id }}', '{{ $json.merchant }}', '{{ $json.headline }}', '{{ $json.discount_label }}', {{ $json.value }}, '{{ $json.kind }}', '{{ $json.category }}', '{{ $json.bank }}', '{{ $json.card }}', '{{ $json.image }}', '{{ JSON.stringify($json.cards) }}', '{{ $json.link }}', {{ $json.expires_at ? \"'\" + $json.expires_at + \"'\" : \"NULL\" }}, '{{ JSON.stringify($json.terms) }}', '{{ $json.last_seen }}', true)\nON CONFLICT (source, ext_id) DO UPDATE SET\n  headline = EXCLUDED.headline,\n  discount_label = EXCLUDED.discount_label,\n  value = EXCLUDED.value,\n  terms = EXCLUDED.terms,\n  last_seen = EXCLUDED.last_seen,\n  active = true;",
         "options": {}
       },
-      "id": "jr-21-upsert",
-      "name": "Upsert offers",
+      "id": "jr-07-upsert",
+      "name": "Upsert offer row",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1560, 220],
+      "position": [1560, 420],
       "credentials": {
-        "postgres": { "id": "REPLACE_AFTER_IMPORT", "name": "Postgres account" }
+        "postgres": { "id": "REPLACE_AFTER_IMPORT", "name": "onlydeals-pg" }
       }
     },
     {
       "parameters": {
-        "jsCode": "const count = $(\"Build offer.v1 payload\").first().json.count;\nreturn [{ json: { ok: true, source: \"jarir\", offers: count, writtenToPostgres: true, at: new Date().toISOString() } }];"
+        "operation": "executeQuery",
+        "query": "UPDATE offers SET active = false\nWHERE source = 'jarir' AND active = true\n  AND last_seen < now() - interval '12 hours';",
+        "options": {}
       },
-      "id": "jr-07-summary",
-      "name": "Summary (webhook reply)",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2000, 220]
+      "id": "jr-08-prune",
+      "name": "Prune stale",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1560, 180],
+      "credentials": {
+        "postgres": { "id": "REPLACE_AFTER_IMPORT", "name": "onlydeals-pg" }
+      }
     },
     {
       "parameters": {
-        "jsCode": "return [{ json: { ok: false, source: \"jarir\", offers: 0, reason: \"no offer patterns found on the page \\u2014 selectors may need an update\", at: new Date().toISOString() } }];"
+        "jsCode": "const p = $('Build offer.v1 payload').first().json.payload;\nconst s = (p.sources && p.sources[0]) || {};\nreturn [{ json: { timestamp: p.generatedAt, source: s.id || '', offers: s.count || 0, status: s.status || '', generator: p.generator } }];"
       },
-      "id": "jr-08-empty",
-      "name": "Empty result (webhook reply)",
+      "id": "jr-09-row",
+      "name": "Run row",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1340, 420]
+      "position": [1780, 180]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "PASTE_SPREADSHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "runs", "mode": "name" },
+        "columns": { "mappingMode": "autoMapInputData", "value": {}, "matchingColumns": [] },
+        "options": {}
+      },
+      "id": "jr-10-sheets",
+      "name": "Log run to sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [2000, 180],
+      "continueOnFail": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "REPLACE_AFTER_IMPORT", "name": "onlydeals-sheets-sa" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const built = $(\"Build offer.v1 payload\").first().json;\nreturn [{ json: { ok: true, source: \"jarir\", offers: built.count, upsertedToDb: true, prunedStale: true, loggedToSheet: true, at: new Date().toISOString() } }];"
+      },
+      "id": "jr-11-summary",
+      "name": "Summary (webhook reply)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2220, 180]
     }
   ],
   "connections": {
     "Trigger (admin / master scheduler)": { "main": [[{ "node": "Fetch offers page", "type": "main", "index": 0 }]] },
     "Fetch offers page": { "main": [[{ "node": "Extract offers", "type": "main", "index": 0 }]] },
     "Extract offers": { "main": [[{ "node": "Build offer.v1 payload", "type": "main", "index": 0 }]] },
-    "Build offer.v1 payload": { "main": [[{ "node": "Has offers?", "type": "main", "index": 0 }]] },
-    "Has offers?": {
+    "Build offer.v1 payload": { "main": [[{ "node": "Flatten offers", "type": "main", "index": 0 }]] },
+    "Flatten offers": { "main": [[{ "node": "Batch DB writes", "type": "main", "index": 0 }]] },
+    "Batch DB writes": {
       "main": [
-        [{ "node": "Flatten offers", "type": "main", "index": 0 }],
-        [{ "node": "Empty result (webhook reply)", "type": "main", "index": 0 }]
+        [{ "node": "Prune stale", "type": "main", "index": 0 }],
+        [{ "node": "Upsert offer row", "type": "main", "index": 0 }]
       ]
     },
-    "Flatten offers": { "main": [[{ "node": "Upsert offers", "type": "main", "index": 0 }]] },
-    "Upsert offers": { "main": [[{ "node": "Summary (webhook reply)", "type": "main", "index": 0 }]] }
+    "Upsert offer row": { "main": [[{ "node": "Batch DB writes", "type": "main", "index": 0 }]] },
+    "Prune stale": { "main": [[{ "node": "Run row", "type": "main", "index": 0 }]] },
+    "Run row": { "main": [[{ "node": "Log run to sheet", "type": "main", "index": 0 }]] },
+    "Log run to sheet": { "main": [[{ "node": "Summary (webhook reply)", "type": "main", "index": 0 }]] }
   },
   "settings": { "executionOrder": "v1" },
   "pinData": {},

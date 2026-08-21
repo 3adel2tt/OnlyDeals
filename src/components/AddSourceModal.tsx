@@ -283,7 +283,7 @@ export default function AddSourceModal({ open, sources, onAdd, onRemove, onClose
                       </span>
                     )}
                     {p === "ok" && (
-                      <span className="flex items-center gap-1 rounded-full bg-live/15 px-2 py-0.5 font-mono text-[9.5px] uppercase tracking-[0.1em] text-[#0d7a47]">
+                      <span className="flex items-center gap-1 rounded-full bg-live/15 px-2 py-0.5 font-mono text-[9.5px] uppercase tracking-[0.1em] text-okc">
                         <CheckIcon className="h-3 w-3" />
                         page reachable
                       </span>

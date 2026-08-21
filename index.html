@@ -22,8 +22,11 @@
     <script>
       try {
         var t = localStorage.getItem("onlydeals.theme");
-        if (t === "dark" || (!t && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
-          document.documentElement.classList.add("dark");
+        if (t === "light") {
+          document.documentElement.classList.add("light");
+          document.documentElement.style.colorScheme = "light";
+        } else {
+          document.documentElement.style.colorScheme = "dark";
         }
       } catch (e) {}
     </script>
