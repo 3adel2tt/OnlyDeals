@@ -15,7 +15,8 @@
  *   POST /api/db/users/:id/toggle         (x-api-key)
  *   DELETE /api/db/users/:id              (x-api-key)
  *   GET  /api/db/registry                 (x-api-key) trigger-URL registry
- *   PUT  /api/db/registry                 (x-api-key)
+ *   PUT  /api/db/registry                 (x-api-key) creates the file if missing
+ *   POST /api/db/probe                    (x-api-key) server-side webhook probe
  *
  * Env:
  *   ONLYDEALS_PG_URL | DATABASE_URL   postgres connection string
@@ -420,12 +421,56 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 200, { ok: true });
       }
 
+      /* POST /api/db/probe {url, payload?} → {ok, status, ms}
+       * Server-side reachability probe for n8n webhooks. Webhook nodes are
+       * POST-only and don't send CORS headers, so the Control Room asks us to
+       * make the request. Any 2xx counts as reachable; the response body is
+       * never parsed (n8n may reply 200 with an empty body). */
+      if (method === "POST" && p === "/api/db/probe") {
+        const body = await readBody(req);
+        const url = String(body.url || "");
+        if (!/^https?:\/\//i.test(url)) return sendJson(res, 400, { error: "url must be http(s)." });
+        const payload =
+          body.payload && typeof body.payload === "object"
+            ? body.payload
+            : { probe: true, at: new Date().toISOString() };
+        const started = Date.now();
+        try {
+          const r = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(90_000), // scrapes can take a while (responseMode: lastNode)
+          });
+          return sendJson(res, 200, {
+            ok: r.status >= 200 && r.status < 300,
+            status: r.status,
+            ms: Date.now() - started,
+          });
+        } catch (e) {
+          return sendJson(res, 200, {
+            ok: false,
+            status: 0,
+            ms: Date.now() - started,
+            error: e && e.name === "TimeoutError" ? "timeout after 90s" : e?.message || "connection failed",
+          });
+        }
+      }
+
       if (p === "/api/db/registry") {
         if (method === "GET") {
           try {
             const raw = fs.readFileSync(REGISTRY_PATH, "utf8");
             return sendJson(res, 200, JSON.parse(raw));
           } catch {
+            // first hit: materialise the default registry file so later
+            // reads/writes have something real on disk
+            try {
+              fs.mkdirSync(path.dirname(REGISTRY_PATH), { recursive: true });
+              fs.writeFileSync(REGISTRY_PATH, JSON.stringify(DEFAULT_REGISTRY, null, 2));
+            } catch {
+              /* read-only FS — still serve the default */
+            }
             return sendJson(res, 200, DEFAULT_REGISTRY);
           }
         }
@@ -434,9 +479,16 @@ const server = http.createServer(async (req, res) => {
           if (!body || typeof body.base !== "string" || typeof body.webhooks !== "object") {
             return sendJson(res, 400, { error: "Registry must be { base, webhooks }." });
           }
+          // optional extension keys (display names, paused flags) pass through
+          const clean = {
+            base: body.base,
+            webhooks: body.webhooks,
+            ...(body.names && typeof body.names === "object" ? { names: body.names } : {}),
+            ...(body.disabled && typeof body.disabled === "object" ? { disabled: body.disabled } : {}),
+          };
           fs.mkdirSync(path.dirname(REGISTRY_PATH), { recursive: true });
-          fs.writeFileSync(REGISTRY_PATH, JSON.stringify(body, null, 2));
-          return sendJson(res, 200, body);
+          fs.writeFileSync(REGISTRY_PATH, JSON.stringify(clean, null, 2));
+          return sendJson(res, 200, clean);
         }
       }
 

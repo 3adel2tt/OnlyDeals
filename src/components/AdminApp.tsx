@@ -167,11 +167,19 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
     });
   }, []);
 
-  /* ---------- registry: server-first, localStorage fallback ---------- */
+  /* ---------- registry: server-truthful, localStorage fallback ----------
+   * Writes go to PUT /api/db/registry first (the feed service persists them to
+   * /etc/onlydeals/registry.json, creating the file if missing). Only after the
+   * server acks do we adopt the change as truth — so nothing "disappears on
+   * refresh": either the server has it, or the save visibly failed.
+   */
+  const didLocalWrite = useRef(false);
   useEffect(() => {
     if (!apiKey) return;
     dbGet<Registry>(apiKey, "/registry")
       .then((r) => {
+        // never clobber a write that just happened in this session
+        if (didLocalWrite.current) return;
         if (r && r.base) {
           setRegistry(r);
           saveJson(REGISTRY_KEY, r);
@@ -180,19 +188,34 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
       .catch(() => showToast("Registry: using local copy (server unreachable or bad key)"));
   }, [apiKey, showToast]);
 
-  const saveRegistry = async (next: Registry) => {
-    setRegistry(next);
-    saveJson(REGISTRY_KEY, next);
+  const saveRegistry = async (next: Registry): Promise<boolean> => {
     if (apiKey) {
       try {
-        await dbPut(apiKey, "/registry", next);
+        const saved = await dbPut<Registry>(apiKey, "/registry", next);
+        const truth =
+          saved && typeof saved.base === "string" && saved.webhooks
+            ? { ...next, ...saved, webhooks: { ...next.webhooks, ...saved.webhooks } }
+            : next;
+        didLocalWrite.current = true;
+        setRegistry(truth);
+        saveJson(REGISTRY_KEY, truth);
         showToast("Registry saved to server");
-        return;
-      } catch {
-        /* fall through */
+        return true;
+      } catch (e) {
+        // keep a local copy so work isn't lost, but be loud about it
+        setRegistry(next);
+        saveJson(REGISTRY_KEY, next);
+        showToast(
+          `Server save failed (${e instanceof Error ? e.message : "HTTP error"}) — kept a local copy only`,
+        );
+        return false;
       }
     }
-    showToast("Registry saved locally (add an API key to sync it)");
+    didLocalWrite.current = true;
+    setRegistry(next);
+    saveJson(REGISTRY_KEY, next);
+    showToast("Registry saved locally — set the x-api-key to persist it to the server");
+    return true;
   };
 
   /* ---------- workflow auto-discovery ---------- */
@@ -294,28 +317,72 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
   const webhookFor = (id: string) =>
     registry.webhooks[id] ?? `${registry.base.replace(/\/+$/, "")}/webhook/onlydeals-${id}`;
 
+  /* ---------- trigger / reachability probe ----------
+   * n8n Webhook nodes are POST-only and rarely send CORS headers, so a
+   * browser-direct fetch fails even for perfectly healthy webhooks. The probe
+   * therefore goes through the feed service (POST /api/db/probe), which makes
+   * the request server-side and treats any 2xx — empty body included — as
+   * "reachable". Direct POST is kept as a no-key fallback.
+   */
   const triggerNow = async (id: string, name: string) => {
     if (isPaused(id)) {
       showToast(`${name} is paused — resume it before triggering`);
       return;
     }
     const url = webhookFor(id);
+    const payload = { triggeredFrom: "control-room", at: new Date().toISOString() };
     setTriggers((t) => ({ ...t, [id]: { state: "busy" } }));
+    const okState = (status: number, ms?: number): TriggerState => ({
+      state: "ok",
+      detail: `reachable · HTTP ${status}${ms != null ? ` · ${ms} ms` : ""} — workflow ran`,
+    });
+    const failState = (reason: string): TriggerState => ({
+      state: "fail",
+      detail: `unreachable · ${reason}`,
+    });
+
+    // preferred: server-side relay (immune to browser CORS)
+    if (apiKey) {
+      try {
+        const r = await dbPost<{ ok: boolean; status: number; ms: number; error?: string }>(
+          apiKey,
+          "/probe",
+          { url, payload },
+        );
+        setTriggers((t) => ({
+          ...t,
+          [id]: r.ok ? okState(r.status, r.ms) : failState(r.error || `HTTP ${r.status}`),
+        }));
+        showToast(r.ok ? `${name}: reachable (HTTP ${r.status})` : `${name}: unreachable`);
+        return;
+      } catch {
+        /* feed service itself unreachable — fall through to direct POST */
+      }
+    }
+
+    // fallback: direct POST (works when n8n is same-origin or sends CORS headers)
     try {
       const ctrl = new AbortController();
-      const timer = window.setTimeout(() => ctrl.abort(), 10_000);
+      const timer = window.setTimeout(() => ctrl.abort(), 90_000);
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ triggeredFrom: "control-room", at: new Date().toISOString() }),
+        body: JSON.stringify(payload),
         signal: ctrl.signal,
       });
       window.clearTimeout(timer);
-      setTriggers((t) => ({ ...t, [id]: { state: "ok", detail: `HTTP ${res.status} — workflow ran` } }));
-      showToast(`${name}: webhook returned ${res.status}`);
+      const reachable = res.status >= 200 && res.status < 300; // empty body is fine
+      setTriggers((t) => ({
+        ...t,
+        [id]: reachable ? okState(res.status) : failState(`HTTP ${res.status}`),
+      }));
+      showToast(reachable ? `${name}: reachable (HTTP ${res.status})` : `${name}: HTTP ${res.status}`);
     } catch {
-      setTriggers((t) => ({ ...t, [id]: { state: "fail", detail: "unreachable — is the workflow deployed & active?" } }));
-      showToast(`${name}: webhook unreachable`);
+      setTriggers((t) => ({
+        ...t,
+        [id]: failState("no response — set the x-api-key to probe via the server"),
+      }));
+      showToast(`${name}: unreachable from this browser`);
     }
   };
 
@@ -345,14 +412,16 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
       `source-${Date.now().toString(36)}`;
     const url =
       wfUrl.trim() || `${registry.base.replace(/\/+$/, "")}/webhook/onlydeals-${id}`;
-    await saveRegistry({
+    const ok = await saveRegistry({
       ...registry,
       webhooks: { ...registry.webhooks, [id]: url },
       names: { ...(registry.names ?? {}), [id]: name },
     });
+    if (!ok) return; // fields stay filled so nothing is silently lost
     setWfName("");
     setWfUrl("");
-    showToast(`${name} added — it's listed under Workflows`);
+    // in local-only mode saveRegistry already showed the sync warning
+    if (apiKey) showToast(`${name} added — persisted to the server registry`);
   };
 
   const deleteWorkflow = async (id: string, name: string) => {
@@ -362,23 +431,26 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
     delete names[id];
     const disabled = { ...(registry.disabled ?? {}) };
     delete disabled[id];
-    await saveRegistry({ ...registry, webhooks, names, disabled });
+    const ok = await saveRegistry({ ...registry, webhooks, names, disabled });
+    setConfirmDeleteWf(null);
+    if (!ok) return;
     // also drop it from the locally-known list so bundled entries hide until a rescan
     setKnown((prev) => {
       const next = prev.filter((w) => w.id !== id);
       saveJson(WORKFLOWS_KEY, next);
       return next;
     });
-    setConfirmDeleteWf(null);
-    showToast(`${name} removed from the registry`);
+    if (apiKey) showToast(`${name} removed from the registry`);
   };
 
   const togglePause = async (id: string, name: string) => {
     const pausing = !isPaused(id);
     const disabled = { ...(registry.disabled ?? {}), [id]: pausing };
     if (!pausing) delete disabled[id];
-    await saveRegistry({ ...registry, disabled });
-    showToast(pausing ? `${name} paused — triggers and the scheduler will skip it` : `${name} resumed`);
+    const ok = await saveRegistry({ ...registry, disabled });
+    if (!ok) return;
+    if (apiKey)
+      showToast(pausing ? `${name} paused — triggers and the scheduler will skip it` : `${name} resumed`);
   };
 
   /* ---------- users ops ---------- */
