@@ -64,28 +64,27 @@ const pool = new pg.Pool({
 async function ensureSchema() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS offers (
-      id serial PRIMARY KEY,
+      id bigserial PRIMARY KEY,
+      merchant_id text NOT NULL,
       source text NOT NULL,
-      ext_id text NOT NULL,
-      merchant text NOT NULL,
-      headline text NOT NULL DEFAULT '',
-      discount_label text NOT NULL DEFAULT '',
-      value numeric NOT NULL DEFAULT 0,
-      kind text NOT NULL DEFAULT 'percent',
-      category text NOT NULL DEFAULT 'online',
-      bank text NOT NULL DEFAULT '',
-      card text NOT NULL DEFAULT '',
-      image text NOT NULL DEFAULT '',
-      cards jsonb NOT NULL DEFAULT '[]',
-      code text,
-      link text NOT NULL DEFAULT '',
-      expires_at timestamptz,
-      terms jsonb NOT NULL DEFAULT '[]',
-      last_seen timestamptz NOT NULL DEFAULT now(),
+      source_type text NOT NULL DEFAULT 'bank',
+      card_name text NOT NULL DEFAULT 'All cards',
+      offer_title text NOT NULL,
+      description text,
+      discount_value text,
+      discount_type text,
+      min_spend numeric,
+      max_discount numeric,
+      start_date date,
+      end_date date,
+      terms_url text,
+      image_url text,
       active boolean NOT NULL DEFAULT true,
-      UNIQUE (source, ext_id)
+      last_seen timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (merchant_id, source, offer_title)
     )`);
   await pool.query(`CREATE INDEX IF NOT EXISTS offers_active_idx ON offers (active)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS offers_source_idx ON offers (source)`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id serial PRIMARY KEY,
@@ -255,25 +254,50 @@ const server = http.createServer(async (req, res) => {
   try {
     /* ---------------- feed ---------------- */
     if (method === "GET" && p === "/onlydeals.json") {
+      // Reads the n8n-written schema (deploy/schema.sql) and aliases those
+      // columns into the offer.v1 card shape the board renders.
       const { rows } = await pool.query(
-        `SELECT * FROM offers WHERE active = true ORDER BY source, value DESC, id DESC`,
+        `SELECT
+           merchant_id,
+           source,
+           source_type,
+           card_name,
+           offer_title,
+           description,
+           discount_value::text AS discount_value,
+           discount_type,
+           max_discount,
+           end_date,
+           terms_url,
+           image_url,
+           last_seen
+         FROM offers
+         WHERE active = true
+         ORDER BY source, end_date ASC NULLS LAST, offer_title`,
       );
+      const prettify = (s) =>
+        String(s ?? "").replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+      const numValue = (label, maxDiscount) => {
+        const m = String(label ?? "").match(/(\d+(?:\.\d+)?)/);
+        if (m) return Number(m[1]);
+        return maxDiscount != null ? Number(maxDiscount) : 0;
+      };
+      const capitalize = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
       const offers = rows.map((r) => ({
-        id: `${r.source}-${r.id}`,
-        merchant: r.merchant,
-        headline: r.headline,
-        discountLabel: r.discount_label,
-        value: Number(r.value),
-        kind: r.kind,
-        category: r.category,
-        image: r.image,
-        cards: r.cards,
-        ...(r.code ? { code: r.code } : {}),
-        link: r.link,
-        expiresAt: r.expires_at ? new Date(r.expires_at).toISOString() : null,
-        terms: r.terms,
-        bank: r.bank,
-        card: r.card,
+        id: `${r.source}-${r.merchant_id}`,
+        merchant: prettify(r.merchant_id),
+        headline: r.description || r.offer_title || "",
+        discountLabel: r.discount_value || "",
+        value: numValue(r.discount_value, r.max_discount),
+        kind: r.discount_type === "percentage" ? "percent" : "fixed",
+        category: "online",
+        image: r.image_url || "",
+        cards: r.card_name ? [r.card_name] : [],
+        link: r.terms_url || "",
+        expiresAt: r.end_date ? new Date(r.end_date).toISOString() : null,
+        terms: [],
+        bank: capitalize(r.source),
+        card: r.card_name || "",
       }));
       const bySource = new Map();
       for (const r of rows) {
@@ -282,7 +306,7 @@ const server = http.createServer(async (req, res) => {
         s.last = Math.max(s.last, new Date(r.last_seen).getTime());
         bySource.set(r.source, s);
       }
-      const names = { alrajhi: "Al Rajhi Bank", jarir: "Jarir" };
+      const names = { alrajhi: "Al Rajhi Bank", jarir: "Jarir", alinma: "Alinma Bank" };
       const sources = Array.from(bySource.entries()).map(([id, s]) => ({
         id,
         name: names[id] || id,

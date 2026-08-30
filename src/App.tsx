@@ -9,8 +9,7 @@ import type {
   User,
 } from "./types";
 import { CATEGORY_LABEL } from "./types";
-import { loadFeed, PROVENANCE_NOTE } from "./lib/feed";
-import { daysLeft } from "./lib/format";
+import { loadFeed } from "./lib/feed";
 import { apiLogout, apiMe } from "./lib/api";
 import {
   cardKey,
@@ -21,10 +20,8 @@ import {
 } from "./lib/follows";
 import AdminApp from "./components/AdminApp";
 import TopBar from "./components/TopBar";
-import Ticker from "./components/Ticker";
 import OfferTile from "./components/OfferTile";
 import OfferModal from "./components/OfferModal";
-import SourcesLedger from "./components/SourcesLedger";
 import BrowseDrawer from "./components/BrowseDrawer";
 import AuthModal from "./components/AuthModal";
 import Footer from "./components/Footer";
@@ -332,16 +329,6 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
     return () => io.disconnect();
   }, [viewMode, pageSize, visible.length]);
 
-  const stats = useMemo(() => {
-    const best = scoped.length
-      ? scoped.reduce((m, o) => (o.value > m.value ? o : m), scoped[0])
-      : undefined;
-    const expiring = scoped.filter(
-      (o) => o.expiresAt && daysLeft(o.expiresAt) <= 7 && daysLeft(o.expiresAt) > 0,
-    ).length;
-    return { count: scoped.length, best, expiring };
-  }, [scoped]);
-
   const scopeLabel =
     scope.type === "bank"
       ? scope.bank
@@ -371,11 +358,10 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
         onSignIn={() => openAuth("generic")}
         onLogout={() => void handleLogout()}
       />
-      <Ticker offers={offers} />
 
       <main className="mx-auto max-w-7xl px-4 sm:px-6">
         {/* intro + live engine status */}
-        <section className="grid gap-6 pt-8 sm:pt-12 lg:grid-cols-[1.2fr_1fr] lg:items-end">
+        <section className="pt-8 sm:pt-12">
           <div className="reveal is-in">
             <p className="flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.22em] text-brick">
               <span className="inline-block h-2 w-2 bg-brick" />
@@ -403,90 +389,6 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
             </p>
           </div>
 
-          {/* engine strip — read-only status from the feed */}
-          <div className="reveal is-in overflow-hidden rounded-xl border border-line bg-card" style={{ transitionDelay: "80ms" }}>
-            <p className="border-b border-line px-4 py-2.5 font-mono text-[9.5px] uppercase tracking-[0.2em] text-ink-faint">
-              engine status · last feed
-            </p>
-            <div className="divide-y divide-line">
-              {(payload?.sources ?? []).map((s) => (
-                <div key={s.id} className="flex items-center gap-3 px-4 py-2.5">
-                  <span
-                    className={`relative inline-block h-2 w-2 shrink-0 rounded-full ${
-                      s.status === "live"
-                        ? "bg-live text-live ping-dot"
-                        : s.status === "error"
-                          ? "bg-ember text-ember"
-                          : "bg-amber text-amber"
-                    }`}
-                  />
-                  <span className="font-display text-[14px] font-bold tracking-tight text-ink">{s.name}</span>
-                  <span className="num-tabular ml-auto font-mono text-[10.5px] text-ink-soft">
-                    {s.count} offer{s.count === 1 ? "" : "s"}
-                  </span>
-                  <span
-                    className={`rounded-full border px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] ${
-                      s.status === "live"
-                        ? "border-live/40 bg-live/10 text-live"
-                        : s.status === "error"
-                          ? "border-ember/40 bg-ember-soft text-ember"
-                          : "border-amber/40 bg-amber-soft text-amber"
-                    }`}
-                  >
-                    {s.status}
-                  </span>
-                </div>
-              ))}
-              {!done && (
-                <div className="px-4 py-3 font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-faint">
-                  reading /onlydeals.json…
-                </div>
-              )}
-            </div>
-            {provenance && (
-              <p className="border-t border-line px-4 py-2 font-mono text-[9.5px] tracking-[0.1em] text-ink-faint">
-                {PROVENANCE_NOTE[provenance]}
-              </p>
-            )}
-          </div>
-        </section>
-
-        {/* stats strip */}
-        <section className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {[
-            {
-              k: view === "my" ? "followed offers" : "offers on board",
-              v: done ? String(stats.count) : "…",
-              sub: done && provenance ? PROVENANCE_NOTE[provenance] : "loading feed",
-              hot: false,
-            },
-            {
-              k: "best discount",
-              v: stats.best ? stats.best.discountLabel : "—",
-              sub: stats.best ? stats.best.merchant : "",
-              hot: true,
-            },
-            {
-              k: "expiring ≤ 7 days",
-              v: String(stats.expiring),
-              sub: "move fast on these",
-              hot: false,
-            },
-          ].map((s, i) => (
-            <div
-              key={s.k}
-              className={`reveal is-in rounded-xl border p-4 transition-all duration-300 hover:-translate-y-0.5 ${
-                s.hot ? "border-brick/30 bg-tint" : "border-line bg-card"
-              }`}
-              style={{ transitionDelay: `${i * 60}ms` }}
-            >
-              <p className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-ink-faint">{s.k}</p>
-              <p className={`num-tabular mt-1.5 font-display text-3xl font-extrabold tracking-tight ${s.hot ? "text-brick" : "text-ink"}`}>
-                {s.v}
-              </p>
-              <p className="mt-0.5 truncate text-[11.5px] text-ink-soft">{s.sub}</p>
-            </div>
-          ))}
         </section>
 
         {/* control deck */}
@@ -706,12 +608,6 @@ function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTh
             </>
           )}
         </section>
-
-        <SourcesLedger
-          outcomes={payload?.sources ?? []}
-          custom={customSources}
-          onPick={(name) => showToast(`${name} is queued — register it from the Control Room to fast-track`)}
-        />
       </main>
 
       <Footer />

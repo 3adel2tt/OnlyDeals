@@ -4,30 +4,31 @@
 -- optional ("zero manual migration"). Keep the two in sync.
 
 -- ---------------------------------------------------------------- offers
+-- Written by the n8n source workflows (upsert) and read by the feed
+-- service, which aliases these columns into the offer.v1 card shape.
 CREATE TABLE IF NOT EXISTS offers (
-  id              serial PRIMARY KEY,
-  source          text        NOT NULL,
-  ext_id          text        NOT NULL,
-  merchant        text        NOT NULL,
-  headline        text        NOT NULL DEFAULT '',
-  discount_label  text        NOT NULL DEFAULT '',
-  value           numeric     NOT NULL DEFAULT 0,
-  kind            text        NOT NULL DEFAULT 'percent',   -- percent | cashback | bogo | installments
-  category        text        NOT NULL DEFAULT 'online',
-  bank            text        NOT NULL DEFAULT '',
-  card            text        NOT NULL DEFAULT '',
-  image           text        NOT NULL DEFAULT '',
-  cards           jsonb       NOT NULL DEFAULT '[]',
-  code            text,
-  link            text        NOT NULL DEFAULT '',
-  expires_at      timestamptz,
-  terms           jsonb       NOT NULL DEFAULT '[]',
-  last_seen       timestamptz NOT NULL DEFAULT now(),
+  id              bigserial   PRIMARY KEY,
+  merchant_id     text        NOT NULL,                     -- slug, part of the dedupe key
+  source          text        NOT NULL,                     -- alrajhi | jarir | alinma | …
+  source_type     text        NOT NULL DEFAULT 'bank',      -- bank | vendor
+  card_name       text        NOT NULL DEFAULT 'All cards',
+  offer_title     text        NOT NULL,                     -- merchant / brand / offer name
+  description     text,
+  discount_value  text,                                     -- '20%' | '50 SAR' | …
+  discount_type   text,                                     -- percentage | fixed
+  min_spend       numeric,
+  max_discount    numeric,
+  start_date      date,
+  end_date        date,
+  terms_url       text,
+  image_url       text,
   active          boolean     NOT NULL DEFAULT true,
-  UNIQUE (source, ext_id)
+  last_seen       timestamptz NOT NULL DEFAULT now(),       -- n8n stamps on every upsert
+  UNIQUE (merchant_id, source, offer_title)
 );
 
-CREATE INDEX IF NOT EXISTS offers_active_idx   ON offers (active);
+CREATE INDEX IF NOT EXISTS offers_active_idx    ON offers (active);
+CREATE INDEX IF NOT EXISTS offers_source_idx    ON offers (source);
 CREATE INDEX IF NOT EXISTS offers_last_seen_idx ON offers (last_seen);
 
 -- ----------------------------------------------------------------- users
