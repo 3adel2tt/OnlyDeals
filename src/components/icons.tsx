@@ -246,3 +246,19 @@ export function WorkflowIcon({ className = "w-4 h-4" }: P) {
     </svg>
   );
 }
+
+export function PauseIcon({ className = "w-4 h-4" }: P) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M7 4.5v11M13 4.5v11" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function PlayIcon({ className = "w-4 h-4" }: P) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} fill="currentColor">
+      <path d="M6 4.3v11.4c0 .8.9 1.3 1.6.9l9-5.7c.6-.4.6-1.4 0-1.8l-9-5.7c-.7-.4-1.6.1-1.6.9z" />
+    </svg>
+  );
+}

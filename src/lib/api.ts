@@ -102,7 +102,12 @@ export async function dbDelete(apiKey: string, path: string): Promise<void> {
 
 export interface Registry {
   base: string;
+  /** id → webhook URL */
   webhooks: Record<string, string>;
+  /** id → display name (so added sources keep their name across devices) */
+  names?: Record<string, string>;
+  /** id → paused; paused sources are skipped by triggers and the scheduler */
+  disabled?: Record<string, boolean>;
 }
 
 export const DEFAULT_REGISTRY: Registry = {

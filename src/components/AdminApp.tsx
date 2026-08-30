@@ -14,12 +14,15 @@ import {
   LockIcon,
   LogoutIcon,
   MoonIcon,
+  PauseIcon,
+  PlayIcon,
   PlusIcon,
   PulseIcon,
   RefreshIcon,
   SearchIcon,
   StoreIcon,
   SunIcon,
+  TrashIcon,
   UserIcon,
   WorkflowIcon,
 } from "./icons";
@@ -236,8 +239,28 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
     };
   }, [manifestTick, localFeedTick]);
 
-  const workflows = useMemo(() => known, [known]);
+  const workflows = useMemo(() => {
+    // manifest/local entries first, then anything that only lives in the
+    // server-side trigger registry (added via "Add a workflow").
+    const merged = [...known];
+    const seen = new Set(known.map((k) => k.id));
+    for (const id of Object.keys(registry.webhooks)) {
+      if (seen.has(id)) continue;
+      merged.push({
+        id,
+        name: registry.names?.[id] || id.charAt(0).toUpperCase() + id.slice(1),
+        type: "source",
+        webhook: `onlydeals-${id}`,
+        origin: "registered",
+        description: "Registered via the Control Room.",
+      });
+      seen.add(id);
+    }
+    return merged;
+  }, [known, registry]);
   const localFeed = readLocalFeed();
+
+  const isPaused = (id: string) => !!registry.disabled?.[id];
 
   /* ---------- auth ---------- */
   const doLogin = async () => {
@@ -272,6 +295,10 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
     registry.webhooks[id] ?? `${registry.base.replace(/\/+$/, "")}/webhook/onlydeals-${id}`;
 
   const triggerNow = async (id: string, name: string) => {
+    if (isPaused(id)) {
+      showToast(`${name} is paused — resume it before triggering`);
+      return;
+    }
     const url = webhookFor(id);
     setTriggers((t) => ({ ...t, [id]: { state: "busy" } }));
     try {
@@ -299,6 +326,59 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
     } catch {
       showToast(text);
     }
+  };
+
+  /* ---------- workflow management (add / delete / pause) ---------- */
+
+  const [wfName, setWfName] = useState("");
+  const [wfUrl, setWfUrl] = useState("");
+  const [confirmDeleteWf, setConfirmDeleteWf] = useState<string | null>(null);
+
+  const addWorkflow = async () => {
+    const name = wfName.trim();
+    if (!name) {
+      showToast("Give the source a name first");
+      return;
+    }
+    const id =
+      name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") ||
+      `source-${Date.now().toString(36)}`;
+    const url =
+      wfUrl.trim() || `${registry.base.replace(/\/+$/, "")}/webhook/onlydeals-${id}`;
+    await saveRegistry({
+      ...registry,
+      webhooks: { ...registry.webhooks, [id]: url },
+      names: { ...(registry.names ?? {}), [id]: name },
+    });
+    setWfName("");
+    setWfUrl("");
+    showToast(`${name} added — it's listed under Workflows`);
+  };
+
+  const deleteWorkflow = async (id: string, name: string) => {
+    const webhooks = { ...registry.webhooks };
+    delete webhooks[id];
+    const names = { ...(registry.names ?? {}) };
+    delete names[id];
+    const disabled = { ...(registry.disabled ?? {}) };
+    delete disabled[id];
+    await saveRegistry({ ...registry, webhooks, names, disabled });
+    // also drop it from the locally-known list so bundled entries hide until a rescan
+    setKnown((prev) => {
+      const next = prev.filter((w) => w.id !== id);
+      saveJson(WORKFLOWS_KEY, next);
+      return next;
+    });
+    setConfirmDeleteWf(null);
+    showToast(`${name} removed from the registry`);
+  };
+
+  const togglePause = async (id: string, name: string) => {
+    const pausing = !isPaused(id);
+    const disabled = { ...(registry.disabled ?? {}), [id]: pausing };
+    if (!pausing) delete disabled[id];
+    await saveRegistry({ ...registry, disabled });
+    showToast(pausing ? `${name} paused — triggers and the scheduler will skip it` : `${name} resumed`);
   };
 
   /* ---------- users ops ---------- */
@@ -781,7 +861,9 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
                   return (
                     <div
                       key={w.id}
-                      className="row-in flex flex-wrap items-center gap-3 px-5 py-4 transition-colors hover:bg-term/40"
+                      className={`row-in flex flex-wrap items-center gap-3 px-5 py-4 transition-all hover:bg-term/40 ${
+                        isPaused(w.id) ? "opacity-55" : ""
+                      }`}
                       style={{ animationDelay: `${i * 40}ms` }}
                     >
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-flare/30 bg-flare/10 text-flare">
@@ -801,6 +883,11 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
                           >
                             {w.origin === "feed" ? "auto-discovered" : w.origin}
                           </span>
+                          {isPaused(w.id) && (
+                            <span className="rounded-full bg-ember/15 px-2 py-0.5 font-mono text-[8.5px] uppercase tracking-[0.12em] text-ember">
+                              paused
+                            </span>
+                          )}
                         </p>
                         <p className="mt-0.5 font-mono text-[9.5px] uppercase tracking-[0.12em] text-dim">
                           {w.type === "scheduler" ? "cron · fans out to sources" : `webhook · onlydeals-${w.id}`}
@@ -838,6 +925,48 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
                         <span className="rounded-full border border-dashed border-term-line px-3 py-1.5 font-mono text-[9.5px] uppercase tracking-[0.12em] text-dim">
                           schedule-driven · no webhook
                         </span>
+                      )}
+
+                      {/* pause / resume */}
+                      <button
+                        onClick={() => void togglePause(w.id, w.name)}
+                        title={isPaused(w.id) ? "Resume — triggers & scheduler will run it again" : "Pause — triggers & scheduler will skip it"}
+                        aria-label={isPaused(w.id) ? `Resume ${w.name}` : `Pause ${w.name}`}
+                        className={`flex items-center gap-1.5 rounded-full border px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] transition-all active:scale-95 ${
+                          isPaused(w.id)
+                            ? "border-okc/50 bg-okc/10 text-okc hover:bg-okc/20"
+                            : "border-term-line text-dim hover:border-amber/50 hover:text-amber"
+                        }`}
+                      >
+                        {isPaused(w.id) ? <PlayIcon className="h-3 w-3" /> : <PauseIcon className="h-3 w-3" />}
+                        {isPaused(w.id) ? "resume" : "pause"}
+                      </button>
+
+                      {/* delete (with confirm) */}
+                      {confirmDeleteWf === w.id ? (
+                        <span className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => void deleteWorkflow(w.id, w.name)}
+                            className="rounded-full bg-ember px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-card transition-all hover:opacity-90 active:scale-95"
+                          >
+                            confirm
+                          </button>
+                          <button
+                            onClick={() => setConfirmDeleteWf(null)}
+                            className="rounded-full border border-term-line px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-dim transition-colors hover:text-ink"
+                          >
+                            cancel
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmDeleteWf(w.id)}
+                          title="Remove from the registry"
+                          aria-label={`Delete ${w.name}`}
+                          className="rounded-full border border-term-line p-2 text-dim transition-colors hover:border-ember/50 hover:text-ember"
+                        >
+                          <TrashIcon className="h-3.5 w-3.5" />
+                        </button>
                       )}
 
                       <p
@@ -932,6 +1061,41 @@ export default function AdminApp({ theme, onToggleTheme, onExit }: Props) {
                       </button>
                     </div>
                   ))}
+                </div>
+
+                {/* add a workflow */}
+                <div className="rounded-lg border border-dashed border-term-line bg-term/40 p-4">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-dim">
+                    add a workflow
+                  </p>
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                    <input
+                      value={wfName}
+                      onChange={(e) => setWfName(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && void addWorkflow()}
+                      placeholder="Source name (e.g. Alinma)"
+                      className="min-w-[160px] flex-1 rounded-lg border border-term-line bg-term px-3 py-2 font-mono text-[11.5px] normal-case tracking-normal text-ink placeholder:text-dim focus:border-flare focus:outline-none"
+                    />
+                    <input
+                      value={wfUrl}
+                      onChange={(e) => setWfUrl(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && void addWorkflow()}
+                      placeholder="Webhook URL (optional — derived from base)"
+                      className="min-w-[220px] flex-[2] rounded-lg border border-term-line bg-term px-3 py-2 font-mono text-[11px] normal-case tracking-normal text-ink-soft placeholder:text-dim focus:border-flare focus:outline-none"
+                    />
+                    <button
+                      onClick={() => void addWorkflow()}
+                      className="flex items-center gap-1.5 rounded-full bg-flare px-4 py-2 font-mono text-[10.5px] font-semibold uppercase tracking-[0.12em] text-card transition-all hover:opacity-90 active:scale-95"
+                    >
+                      <PlusIcon className="h-3.5 w-3.5" />
+                      add
+                    </button>
+                  </div>
+                  <p className="mt-2 font-mono text-[9.5px] leading-relaxed text-dim">
+                    Merged into <code className="text-flare">registry.json</code> via PUT{" "}
+                    <code className="text-flare">/api/db/registry</code> — appears in the Workflows tab and
+                    survives reloads and other machines.
+                  </p>
                 </div>
               </div>
             </section>
