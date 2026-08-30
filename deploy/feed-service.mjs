@@ -273,7 +273,7 @@ const server = http.createServer(async (req, res) => {
            image_url,
            last_seen
          FROM offers
-         WHERE active = true
+         WHERE active = true AND (end_date IS NULL OR end_date >= current_date)
          ORDER BY source, end_date ASC NULLS LAST, offer_title`,
       );
       const prettify = (s) =>
