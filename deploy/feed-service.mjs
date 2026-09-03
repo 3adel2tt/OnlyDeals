@@ -273,7 +273,8 @@ const server = http.createServer(async (req, res) => {
            image_url,
            last_seen
          FROM offers
-         WHERE active = true AND (end_date IS NULL OR end_date >= current_date)
+         WHERE active = true
+           AND (end_date IS NULL OR end_date >= current_date)
          ORDER BY source, end_date ASC NULLS LAST, offer_title`,
       );
       const prettify = (s) =>
@@ -295,7 +296,9 @@ const server = http.createServer(async (req, res) => {
         image: r.image_url || "",
         cards: r.card_name ? [r.card_name] : [],
         link: r.terms_url || "",
-        expiresAt: r.end_date ? new Date(r.end_date).toISOString() : null,
+        expiresAt: r.end_date
+          ? new Date(new Date(r.end_date).setUTCHours(20, 59, 59, 0)).toISOString()
+          : null, // end of day, Saudi time (UTC+3)
         terms: [],
         bank: capitalize(r.source),
         card: r.card_name || "",
