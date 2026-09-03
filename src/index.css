@@ -91,24 +91,6 @@ body {
   transform: none;
 }
 
-/* ---- marquee ticker ---- */
-.marquee .marquee-track {
-  display: flex;
-  width: max-content;
-  animation: marquee 42s linear infinite;
-}
-.marquee:hover .marquee-track {
-  animation-play-state: paused;
-}
-@keyframes marquee {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-
 /* ---- modal + error shake ---- */
 @keyframes modal-pop {
   from {
@@ -165,10 +147,6 @@ body {
     opacity: 1;
     transform: none;
     transition: none;
-  }
-  .marquee .marquee-track {
-    animation: none;
-    flex-wrap: wrap;
   }
   .modal-pop,
   .shake-x,
