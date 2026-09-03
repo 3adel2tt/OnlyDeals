@@ -247,7 +247,6 @@ export default function App() {
         onLogout={onLogout}
       />
 
-      <Ticker offers={offers} />
 
       <main className="mx-auto max-w-7xl px-4 pb-20 pt-8 sm:px-6">
         {/* board head */}
