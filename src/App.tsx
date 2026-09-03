@@ -1,671 +1,439 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type {
-  BrowseScope,
-  Category,
-  CustomSource,
-  FeedPayload,
-  FeedProvenance,
-  Offer,
-  User,
-} from "./types";
-import { CATEGORY_LABEL } from "./types";
-import { loadFeed } from "./lib/feed";
-import { apiLogout, apiMe } from "./lib/api";
-import {
-  cardKey,
-  getFollows,
-  offerFollowed,
-  toggleFollow,
-  vendorKey,
-} from "./lib/follows";
-import AdminApp from "./components/AdminApp";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import TopBar from "./components/TopBar";
 import OfferTile from "./components/OfferTile";
 import OfferModal from "./components/OfferModal";
-import BrowseDrawer from "./components/BrowseDrawer";
-import AuthModal from "./components/AuthModal";
-import Footer from "./components/Footer";
 import Paginator, { type ViewMode } from "./components/Paginator";
-import { BankIcon, CheckIcon, CloseIcon, SearchIcon, StarIcon, StoreIcon } from "./components/icons";
+import BrowseDrawer from "./components/BrowseDrawer";
+import SourcesLedger from "./components/SourcesLedger";
+import AuthModal from "./components/AuthModal";
+import AdminApp from "./components/AdminApp";
+import Footer from "./components/Footer";
+import { SearchIcon, RefreshIcon } from "./components/icons";
+import { loadFeed, type FeedResult } from "./lib/feed";
+import { apiLogout, apiMe } from "./lib/api";
+import {
+  cardKey,
+  vendorKey,
+  getFollows,
+  toggleFollow,
+  offerFollowed,
+} from "./lib/follows";
+import { daysLeft } from "./lib/format";
+import { alrajhiSnapshot } from "./data/alrajhiSnapshot";
+import type {
+  BrowseScope,
+  CustomSource,
+  FeedProvenance,
+  Offer,
+  SourceOutcome,
+  User,
+} from "./types";
 
-type SortKey = "expiring" | "value" | "recent";
+type Sort = "big" | "soon";
 
-const REGISTRY_KEY = "onlydeals.registry.v1";
-const THEME_KEY = "onlydeals.theme";
-const VIEW_KEY = "onlydeals.view";
-const PAGESIZE_KEY = "onlydeals.pagesize";
-const FEED_INTERVAL_MS = 5 * 60 * 1000;
-
-function isAdminRoute(): boolean {
-  const path = window.location.pathname.replace(/\/+$/, "");
-  return path.endsWith("/adminn") || window.location.hash.includes("adminn");
-}
-
-function basePath(): string {
-  return window.location.pathname.replace(/adminn\/?$/, "");
-}
-
-function initialTheme(): "light" | "dark" {
+function loadJson<T>(key: string, fallback: T): T {
   try {
-    return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
-    return "dark";
+    return fallback;
   }
 }
 
-function loadRegistry(): CustomSource[] {
-  try {
-    const raw = localStorage.getItem(REGISTRY_KEY);
-    return raw ? (JSON.parse(raw) as CustomSource[]) : [];
-  } catch {
-    return [];
+function scopeLabel(scope: BrowseScope): string {
+  switch (scope.type) {
+    case "all":
+      return "All sources";
+    case "bank":
+      return scope.bank;
+    case "bank-card":
+      return `${scope.bank} · ${scope.card}`;
+    case "vendor":
+      return scope.vendor;
   }
 }
-
-function SkeletonTile() {
-  return (
-    <div className="overflow-hidden rounded-xl border border-ink/10 bg-card">
-      <div className="aspect-[4/3] animate-pulse bg-tint" />
-      <div className="space-y-2.5 p-4">
-        <div className="h-2.5 w-16 animate-pulse rounded bg-tint" />
-        <div className="h-4 w-2/3 animate-pulse rounded bg-tint" />
-        <div className="h-3 w-full animate-pulse rounded bg-tint" />
-        <div className="h-3 w-4/5 animate-pulse rounded bg-tint" />
-      </div>
-    </div>
-  );
-}
-
-/* ---------------- router + theme ---------------- */
 
 export default function App() {
-  const [admin, setAdmin] = useState(isAdminRoute);
-  const [theme, setTheme] = useState<"light" | "dark">(initialTheme);
-
-  useEffect(() => {
-    const onChange = () => setAdmin(isAdminRoute());
-    window.addEventListener("popstate", onChange);
-    window.addEventListener("hashchange", onChange);
-    return () => {
-      window.removeEventListener("popstate", onChange);
-      window.removeEventListener("hashchange", onChange);
-    };
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.classList.toggle("light", theme === "light");
-    document.documentElement.style.colorScheme = theme;
+  /* ---------------- theme ---------------- */
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
     try {
-      localStorage.setItem(THEME_KEY, theme);
+      return localStorage.getItem("onlydeals.theme") === "light" ? "light" : "dark";
+    } catch {
+      return "dark";
+    }
+  });
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle("light", theme === "light");
+    root.style.colorScheme = theme;
+    try {
+      localStorage.setItem("onlydeals.theme", theme);
     } catch {
       /* ignore */
     }
   }, [theme]);
-
-  const toggleTheme = useCallback(() => {
-    setTheme((t) => (t === "dark" ? "light" : "dark"));
-  }, []);
-
-  const navigate = useCallback((to: "public" | "admin") => {
-    const url = to === "admin" ? `${basePath()}adminn` : basePath() || "/";
-    try {
-      window.history.pushState(null, "", url);
-    } catch {
-      window.location.hash = to === "admin" ? "#/adminn" : "#/";
-    }
-    setAdmin(to === "admin");
-    window.scrollTo({ top: 0 });
-  }, []);
-
-  return admin ? (
-    <AdminApp theme={theme} onToggleTheme={toggleTheme} onExit={() => navigate("public")} />
-  ) : (
-    <SiteApp theme={theme} onToggleTheme={toggleTheme} />
+  const toggleTheme = useCallback(
+    () => setTheme((t) => (t === "dark" ? "light" : "dark")),
+    [],
   );
-}
 
-/* ---------------- public site: pure feed reader ---------------- */
+  /* ---------------- route (#/admin → control room) ---------------- */
+  const [route, setRoute] = useState(() => window.location.hash);
+  useEffect(() => {
+    const onHash = () => setRoute(window.location.hash);
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
-function SiteApp({ theme, onToggleTheme }: { theme: "light" | "dark"; onToggleTheme: () => void }) {
-  const [payload, setPayload] = useState<FeedPayload | null>(null);
-  const [provenance, setProvenance] = useState<FeedProvenance | null>(null);
-  const [lastSync, setLastSync] = useState<number | null>(null);
-  const [selected, setSelected] = useState<Offer | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [category, setCategory] = useState<Category | "all">("all");
-  const [sort, setSort] = useState<SortKey>("expiring");
-  const [scope, setScope] = useState<BrowseScope>({ type: "all" });
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [customSources] = useState<CustomSource[]>(loadRegistry);
+  /* ---------------- feed ---------------- */
+  const [feed, setFeed] = useState<FeedResult | null>(null);
+  const [syncing, setSyncing] = useState(true);
+  const [reloadTick, setReloadTick] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSyncing(true);
+    loadFeed().then((r) => {
+      if (!cancelled) {
+        setFeed(r);
+        setSyncing(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadTick]);
+
+  const provenance: FeedProvenance | null = feed?.provenance ?? null;
+
+  const offers: Offer[] = useMemo(() => {
+    if (!feed) return [];
+    if (feed.provenance === "bundled") return alrajhiSnapshot();
+    return feed.payload.offers;
+  }, [feed]);
+
+  const outcomes: SourceOutcome[] = feed?.payload.sources ?? [];
+  const generator = feed?.payload.generator ?? "—";
+
+  /* ---------------- session + follows ---------------- */
   const [user, setUser] = useState<User | null>(null);
   const [follows, setFollows] = useState<string[]>([]);
-  const [view, setView] = useState<"all" | "my">("all");
-  const [authOpen, setAuthOpen] = useState(false);
-  const [authIntent, setAuthIntent] = useState<"generic" | "follow">("generic");
-
-  // pagination / view mode (persisted)
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    try {
-      return localStorage.getItem(VIEW_KEY) === "infinite" ? "infinite" : "pages";
-    } catch {
-      return "pages";
-    }
-  });
-  const [pageSize, setPageSize] = useState<number>(() => {
-    try {
-      const n = Number(localStorage.getItem(PAGESIZE_KEY));
-      return n === 24 || n === 48 || n === 96 ? n : 24;
-    } catch {
-      return 24;
-    }
-  });
-  const [page, setPage] = useState(1);
-  const [loaded, setLoaded] = useState(pageSize);
-
-  const toastTimer = useRef<number | undefined>(undefined);
-  const searchRef = useRef<HTMLInputElement>(null);
-  const sentinelRef = useRef<HTMLDivElement | null>(null);
-
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
-    window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToast(null), 2600);
-  }, []);
-
-  /* ---------- feed: read on load + every 5 minutes (no manual sync) ---------- */
-  const refresh = useCallback(async (silent: boolean) => {
-    const res = await loadFeed();
-    setPayload(res.payload);
-    setProvenance(res.provenance);
-    setLastSync(res.fetchedAt);
-    if (!silent) showToast(`Feed loaded — ${res.payload.offers.length} offers`);
-  }, [showToast]);
-
   useEffect(() => {
-    void refresh(false);
-    const t = window.setInterval(() => void refresh(true), FEED_INTERVAL_MS);
-    return () => window.clearInterval(t);
-  }, [refresh]);
-
-  /* ---------- session restore (server cookie) ---------- */
-  useEffect(() => {
-    void apiMe().then((u) => {
-      if (u) {
-        setUser(u);
-        setFollows(getFollows(u.id));
-      }
+    apiMe().then((u) => {
+      setUser(u);
+      if (u) setFollows(getFollows(u.id));
     });
   }, []);
 
-  /* ---------- auth ---------- */
-  const openAuth = (intent: "generic" | "follow") => {
-    setAuthIntent(intent);
-    setAuthOpen(true);
-  };
+  const [auth, setAuth] = useState<{ open: boolean; intent: "generic" | "follow" }>({
+    open: false,
+    intent: "generic",
+  });
 
-  const handleAuthed = (u: User) => {
-    setUser(u);
-    setFollows(getFollows(u.id));
-    setAuthOpen(false);
-    showToast(`Welcome, ${u.displayName || u.email}`);
-  };
+  const [toast, setToast] = useState<string | null>(null);
+  const say = useCallback((msg: string) => {
+    setToast(msg);
+    window.setTimeout(() => setToast(null), 2600);
+  }, []);
 
-  const handleLogout = async () => {
+  const toggle = useCallback(
+    (key: string, label: string) => {
+      if (!user) {
+        setAuth({ open: true, intent: "follow" });
+        return;
+      }
+      const next = toggleFollow(user.id, key);
+      setFollows(next);
+      say(next.includes(key) ? `Following ${label}` : `Unfollowed ${label}`);
+    },
+    [user, say],
+  );
+
+  const onToggleVendor = useCallback(
+    (o: Offer) => toggle(vendorKey(o.merchant), o.merchant),
+    [toggle],
+  );
+  const onToggleCard = useCallback(
+    (o: Offer) => toggle(cardKey(o.bank, o.card), `${o.card} (${o.bank})`),
+    [toggle],
+  );
+
+  /* ---------------- board controls ---------------- */
+  const [view, setView] = useState<"all" | "my">("all");
+  const [scope, setScope] = useState<BrowseScope>({ type: "all" });
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<Sort>("big");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(24);
+  const [viewMode, setViewMode] = useState<ViewMode>("pages");
+  const [active, setActive] = useState<Offer | null>(null);
+
+  const custom: CustomSource[] = useMemo(
+    () => loadJson<CustomSource[]>("onlydeals.sources.v1", []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [drawerOpen, route],
+  );
+
+  useEffect(() => setPage(1), [search, scope, view, sort, pageSize, offers]);
+
+  const filtered = useMemo(() => {
+    let list = offers;
+    if (scope.type === "bank") list = list.filter((o) => o.bank === scope.bank);
+    if (scope.type === "bank-card")
+      list = list.filter((o) => o.bank === scope.bank && o.card === scope.card);
+    if (scope.type === "vendor") list = list.filter((o) => o.merchant === scope.vendor);
+    if (view === "my") list = list.filter((o) => offerFollowed(o, follows));
+    const q = search.trim().toLowerCase();
+    if (q) {
+      list = list.filter((o) =>
+        [o.merchant, o.headline, o.bank, o.card, ...o.cards]
+          .join(" ")
+          .toLowerCase()
+          .includes(q),
+      );
+    }
+    const sorted = [...list];
+    if (sort === "big") sorted.sort((a, b) => b.value - a.value);
+    else
+      sorted.sort((a, b) => {
+        if (!a.expiresAt && !b.expiresAt) return 0;
+        if (!a.expiresAt) return 1;
+        if (!b.expiresAt) return -1;
+        return daysLeft(a.expiresAt) - daysLeft(b.expiresAt);
+      });
+    return sorted;
+  }, [offers, scope, view, follows, search, sort]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const visible =
+    viewMode === "infinite"
+      ? filtered.slice(0, page * pageSize)
+      : filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  const onLogout = useCallback(async () => {
     await apiLogout();
     setUser(null);
     setFollows([]);
-    setView("all");
-    showToast("Signed out — see you soon");
-  };
+    say("Signed out");
+  }, [say]);
 
-  /* ---------- follows ---------- */
-  const toggleCard = (bank: string, card: string) => {
-    if (!user) return openAuth("follow");
-    const key = cardKey(bank, card);
-    const next = toggleFollow(user.id, key);
-    setFollows(next);
-    showToast(next.includes(key) ? `Following ${card}` : `Unfollowed ${card}`);
-  };
-
-  const toggleVendor = (merchant: string) => {
-    if (!user) return openAuth("follow");
-    const key = vendorKey(merchant);
-    const next = toggleFollow(user.id, key);
-    setFollows(next);
-    showToast(next.includes(key) ? `Following ${merchant}` : `Unfollowed ${merchant}`);
-  };
-
-  /* ---------- keyboard: "/" focuses search ---------- */
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "/" && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
-        e.preventDefault();
-        searchRef.current?.focus();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  /* ---------- derived data ---------- */
-  const offers = useMemo(() => payload?.offers ?? [], [payload]);
-
-  const applyScope = useCallback((next: BrowseScope) => {
-    setScope(next);
-    setCategory("all");
-    setSearch("");
-    setDrawerOpen(false);
-    window.setTimeout(() => {
-      document.getElementById("board")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 60);
-  }, []);
-
-  const scoped = useMemo(() => {
-    let list = offers;
-    if (view === "my") list = list.filter((o) => offerFollowed(o, follows));
-    if (scope.type === "bank") list = list.filter((o) => o.bank === scope.bank);
-    if (scope.type === "bank-card") list = list.filter((o) => o.bank === scope.bank && o.card === scope.card);
-    if (scope.type === "vendor") list = list.filter((o) => o.merchant === scope.vendor);
-    return list;
-  }, [offers, view, follows, scope]);
-
-  const categories = useMemo(
-    () => Array.from(new Set(scoped.map((o) => o.category))).sort(),
-    [scoped],
-  );
-
-  const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const filtered = scoped.filter((o) => {
-      if (category !== "all" && o.category !== category) return false;
-      if (!q) return true;
-      return (
-        o.merchant.toLowerCase().includes(q) ||
-        o.headline.toLowerCase().includes(q) ||
-        o.code?.toLowerCase().includes(q) ||
-        CATEGORY_LABEL[o.category].toLowerCase().includes(q)
-      );
-    });
-    const byExpiry = (o: Offer) => (o.expiresAt ? Date.parse(o.expiresAt) : Number.MAX_SAFE_INTEGER);
-    if (sort === "expiring") return [...filtered].sort((a, b) => byExpiry(a) - byExpiry(b));
-    if (sort === "value") return [...filtered].sort((a, b) => b.value - a.value);
-    if (sort === "recent") return [...filtered].sort((a, b) => b.id.localeCompare(a.id));
-    return filtered;
-  }, [scoped, search, category, sort]);
-
-  /* ---------- pagination math ---------- */
-  const scopeKey = JSON.stringify(scope);
-  useEffect(() => {
-    setPage(1);
-    setLoaded(pageSize);
-  }, [search, category, sort, scopeKey, view, pageSize, visible.length]);
-
-  const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
-  const clampedPage = Math.min(page, totalPages);
-
-  const pageItems = useMemo(
-    () =>
-      viewMode === "pages"
-        ? visible.slice((clampedPage - 1) * pageSize, clampedPage * pageSize)
-        : visible.slice(0, loaded),
-    [viewMode, visible, clampedPage, pageSize, loaded],
-  );
-
-  /* infinite-scroll sentinel */
-  useEffect(() => {
-    if (viewMode !== "infinite") return;
-    const el = sentinelRef.current;
-    if (!el) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) {
-          setLoaded((l) => Math.min(l + pageSize, visible.length));
-        }
-      },
-      { rootMargin: "600px 0px" },
+  /* ---------------- control room ---------------- */
+  if (route.startsWith("#/admin")) {
+    return (
+      <AdminApp
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onExit={() => {
+          window.location.hash = "";
+        }}
+      />
     );
-    io.observe(el);
-    return () => io.disconnect();
-  }, [viewMode, pageSize, visible.length]);
-
-  const scopeLabel =
-    scope.type === "bank"
-      ? scope.bank
-      : scope.type === "bank-card"
-        ? `${scope.bank} › ${scope.card}`
-        : scope.type === "vendor"
-          ? scope.vendor
-          : "";
-
-  const done = payload !== null;
+  }
 
   return (
-    <div id="top" className="min-h-screen">
+    <div className="min-h-screen">
       <TopBar
         provenance={provenance}
-        lastSync={lastSync}
+        lastSync={feed?.fetchedAt ?? null}
         theme={theme}
-        onToggleTheme={onToggleTheme}
+        onToggleTheme={toggleTheme}
         onBrowse={() => setDrawerOpen(true)}
         user={user}
         view={view}
         followCount={follows.length}
-        onToggleView={() => {
-          if (!user) return openAuth("follow");
-          setView((v) => (v === "my" ? "all" : "my"));
-        }}
-        onSignIn={() => openAuth("generic")}
-        onLogout={() => void handleLogout()}
+        onToggleView={() => setView((v) => (v === "all" ? "my" : "all"))}
+        onSignIn={() => setAuth({ open: true, intent: "generic" })}
+        onLogout={onLogout}
       />
 
-      <main className="mx-auto max-w-7xl px-4 sm:px-6">
-        {/* intro + live engine status */}
-        <section className="pt-8 sm:pt-12">
-          <div className="reveal is-in">
-            <p className="flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.22em] text-brick">
-              <span className="inline-block h-2 w-2 bg-brick" />
-              sources 01–02 · n8n engines · alrajhi + jarir
-            </p>
-            <h1 className="mt-4 font-display text-[42px] font-extrabold leading-[0.98] tracking-tight text-ink sm:text-[58px]">
-              {view === "my" ? (
-                <>
-                  Your deals,
-                  <br />
-                  <span className="text-brick">on one board.</span>
-                </>
-              ) : (
-                <>
-                  Every card offer,
-                  <br />
-                  <span className="text-brick">scraped & sorted.</span>
-                </>
-              )}
+      <Ticker offers={offers} />
+
+      <main className="mx-auto max-w-7xl px-4 pb-20 pt-8 sm:px-6">
+        {/* board head */}
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
+              The board
             </h1>
-            <p className="mt-4 max-w-md text-[14px] leading-relaxed text-ink-soft">
-              n8n workflows crawl bank and merchant offer pages on your server; this board
-              reads the feed every five minutes. Follow the cards you own or the merchants
-              you love — your list lives under <span className="font-semibold text-ink">My deals</span>.
+            <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint">
+              {scopeLabel(scope)} · {filtered.length} offer{filtered.length === 1 ? "" : "s"}
+              {syncing && <span className="ml-2 text-flare">syncing…</span>}
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => setReloadTick((n) => n + 1)}
+            className="group flex items-center gap-2 rounded-md border border-line bg-card px-3 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-ink-soft transition-colors hover:border-flare hover:text-flare"
+          >
+            <RefreshIcon className="h-3.5 w-3.5 transition-transform duration-500 group-hover:rotate-180" />
+            Re-pull feed
+          </button>
+        </div>
 
-        </section>
+        {/* toolbar */}
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row">
+          <label className="relative flex-1">
+            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search merchant, bank, card…"
+              className="w-full rounded-md border border-line bg-card py-2.5 pl-9 pr-3 text-sm text-ink placeholder:text-ink-faint focus:border-flare focus:outline-none"
+            />
+          </label>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as Sort)}
+            className="rounded-md border border-line bg-card px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-ink-soft focus:border-flare focus:outline-none"
+            aria-label="Sort offers"
+          >
+            <option value="big">Biggest discount first</option>
+            <option value="soon">Ending soonest</option>
+          </select>
+        </div>
 
-        {/* control deck */}
-        <section id="board" className="mt-8 scroll-mt-24">
-          {scope.type !== "all" && (
-            <div className="fade-in mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-brick/30 bg-tint/70 px-4 py-2.5">
-              {scope.type === "vendor" ? (
-                <StoreIcon className="h-4 w-4 text-brick" />
-              ) : (
-                <BankIcon className="h-4 w-4 text-brick" />
-              )}
-              <span className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-brick/70">
-                browsing
-              </span>
-              <span className="font-display text-[14.5px] font-bold tracking-tight text-ink">
-                {scopeLabel}
-              </span>
-              <span className="num-tabular rounded-full bg-brick px-2 py-0.5 font-mono text-[10px] font-semibold text-card">
-                {scoped.length} offer{scoped.length === 1 ? "" : "s"}
-              </span>
-              <button
-                onClick={() => applyScope({ type: "all" })}
-                className="ml-auto flex items-center gap-1.5 rounded-full border border-brick/40 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-brick transition-all hover:bg-brick hover:text-card active:scale-95"
-              >
-                <CloseIcon className="h-3 w-3" />
-                show all offers
-              </button>
-            </div>
-          )}
-
-          <div className="flex flex-col gap-3 md:flex-row md:items-center">
-            <div className="relative flex-1">
-              <SearchIcon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
-              <input
-                ref={searchRef}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search merchants, codes, categories…  ( / )"
-                className="w-full rounded-full border border-line bg-card py-2.5 pl-10 pr-4 text-[13.5px] text-ink placeholder:text-ink-faint transition-all focus:border-brick focus:outline-none focus:ring-2 focus:ring-brick/15"
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-faint transition-colors hover:text-brick"
-                  aria-label="Clear search"
-                >
-                  <CloseIcon className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <select
-                value={sort}
-                onChange={(e) => setSort(e.target.value as SortKey)}
-                className="cursor-pointer rounded-full border border-line bg-card px-4 py-2.5 font-mono text-[11px] uppercase tracking-[0.1em] text-ink-soft focus:border-brick focus:outline-none"
-                aria-label="Sort offers"
-              >
-                <option value="expiring">expiring soonest</option>
-                <option value="value">biggest discount</option>
-                <option value="recent">recently added</option>
-              </select>
-            </div>
+        {/* grid / empty states */}
+        {offers.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-line bg-card/50 px-6 py-16 text-center">
+            <p className="font-display text-xl font-bold text-ink-soft">Waiting for the first n8n sync</p>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-ink-faint">
+              The board only shows offers produced by the scraping pipeline. Point the feed at
+              <code className="mx-1 rounded bg-tint px-1.5 py-0.5 font-mono text-[11px] text-flare">/onlydeals.json</code>
+              or push a test payload from the control room.
+            </p>
           </div>
-
-          {/* category chips */}
-          <div className="mt-3.5 flex flex-wrap gap-2">
-            {(["all", ...categories] as Array<Category | "all">).map((c) => (
-              <button
-                key={c}
-                onClick={() => setCategory(c)}
-                className={`rounded-full border px-3.5 py-1.5 font-mono text-[10.5px] uppercase tracking-[0.12em] transition-all active:scale-95 ${
-                  category === c
-                    ? "border-brick bg-brick text-card shadow-[0_4px_14px_-4px_color-mix(in_oklab,var(--color-brick)_70%,transparent)]"
-                    : "border-line bg-card text-ink-soft hover:border-brick/50 hover:text-brick"
-                }`}
-              >
-                {c === "all" ? `all · ${scoped.length || "…"}` : CATEGORY_LABEL[c]}
-              </button>
-            ))}
+        ) : filtered.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-line bg-card/50 px-6 py-16 text-center">
+            <p className="font-display text-xl font-bold text-ink-soft">
+              {view === "my" ? "Nothing followed here yet" : "No matches"}
+            </p>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-ink-faint">
+              {view === "my"
+                ? "Star a card tier or a merchant and your slice of the board appears here."
+                : "Try a different search, or clear the browse scope."}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setScope({ type: "all" });
+                if (view === "my") setView("all");
+              }}
+              className="mt-5 rounded-md bg-brick px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-paper transition-transform hover:-translate-y-0.5"
+            >
+              Show everything
+            </button>
           </div>
-
-          <p className="num-tabular mt-3 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
-            {done
-              ? scope.type !== "all"
-                ? `showing ${visible.length} of ${scoped.length} · in scope`
-                : `showing ${visible.length} of ${offers.length}`
-              : "reading feed…"}
-          </p>
-
-          {/* the board */}
-          {!done ? (
-            <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <SkeletonTile key={i} />
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {visible.map((o, i) => (
+                <OfferTile
+                  key={o.id}
+                  offer={o}
+                  index={i}
+                  followed={offerFollowed(o, follows)}
+                  onOpen={setActive}
+                  onToggleFollow={onToggleVendor}
+                />
               ))}
             </div>
-          ) : view === "my" && follows.length === 0 ? (
-            <div className="fade-in mx-auto max-w-md rounded-xl border border-dashed border-line bg-card/60 px-6 py-14 text-center">
-              <StarIcon className="mx-auto h-9 w-9 text-amber" filled />
-              <p className="mt-3 font-display text-[19px] font-bold tracking-tight text-ink">
-                Your deals list is empty
-              </p>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-ink-soft">
-                Star the card tiers you own or the merchants you love — from any tile or
-                offer detail — and they collect here.
-              </p>
-              <button
-                onClick={() => setView("all")}
-                className="mt-4 rounded-full bg-brick px-5 py-2.5 font-mono text-[10.5px] uppercase tracking-[0.14em] text-card transition-all hover:opacity-90 active:scale-95"
-              >
-                Browse the board
-              </button>
-            </div>
-          ) : done && scoped.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-line bg-card/60 px-6 py-16 text-center">
-              <TagEmpty />
-              <p className="font-display text-xl font-bold text-ink">
-                Nothing in the feed for {scopeLabel} yet
-              </p>
-              <p className="max-w-sm text-[13px] leading-relaxed text-ink-soft">
-                This source hasn't posted offers yet — its n8n workflow hasn't run, or it came
-                back empty. The master scheduler will pick it up on the next pass.
-              </p>
-              <button
-                onClick={() => applyScope({ type: "all" })}
-                className="mt-1 rounded-full bg-ink px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-paper transition-colors hover:bg-brick hover:text-card"
-              >
-                Back to all offers
-              </button>
-            </div>
-          ) : visible.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-line bg-card/60 px-6 py-16 text-center">
-              <TagEmpty />
-              <p className="font-display text-xl font-bold text-ink">No deals on the board</p>
-              <p className="max-w-sm text-[13px] leading-relaxed text-ink-soft">
-                {view === "my"
-                  ? "None of your followed offers match the current filters."
-                  : `No offers match${search ? ` “${search}”` : ""} in this category. Widen the sweep.`}
-              </p>
-              <div className="mt-1 flex flex-wrap justify-center gap-2">
-                {scope.type !== "all" && (
-                  <button
-                    onClick={() => applyScope({ type: "all" })}
-                    className="rounded-full bg-ink px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-paper transition-colors hover:bg-brick hover:text-card"
-                  >
-                    Clear scope
-                  </button>
-                )}
+
+            {viewMode === "infinite" && page < totalPages ? (
+              <div className="mt-8 flex justify-center">
                 <button
-                  onClick={() => {
-                    setSearch("");
-                    setCategory("all");
-                  }}
-                  className={`rounded-full px-4 py-2 font-mono text-[11px] uppercase tracking-[0.14em] transition-colors ${
-                    scope.type !== "all"
-                      ? "border border-line text-ink-soft hover:border-brick hover:text-brick"
-                      : "bg-ink text-paper hover:bg-brick hover:text-card"
-                  }`}
+                  type="button"
+                  onClick={() => setPage((p) => p + 1)}
+                  className="rounded-md border border-line bg-card px-6 py-3 font-mono text-[11px] uppercase tracking-[0.16em] text-ink-soft transition-colors hover:border-flare hover:text-flare"
                 >
-                  Reset sweep
+                  Load {Math.min(pageSize, filtered.length - page * pageSize)} more
                 </button>
               </div>
-            </div>
-          ) : (
-            <>
-              <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {pageItems.map((o, i) => (
-                  <OfferTile
-                    key={o.id}
-                    offer={o}
-                    index={i}
-                    followed={offerFollowed(o, follows)}
-                    onOpen={setSelected}
-                    onToggleFollow={(offer) => toggleCard(offer.bank, offer.card)}
-                  />
-                ))}
-              </div>
+            ) : null}
 
-              {/* infinite-scroll sentinel */}
-              {viewMode === "infinite" && loaded < visible.length && (
-                <div ref={sentinelRef} className="flex items-center justify-center gap-2 py-8 font-mono text-[10.5px] uppercase tracking-[0.16em] text-ink-faint">
-                  <span className="spin inline-block h-3.5 w-3.5 rounded-full border-2 border-line border-t-brick" />
-                  loading more…
-                </div>
-              )}
+            <Paginator
+              viewMode={viewMode}
+              onViewMode={setViewMode}
+              pageSize={pageSize}
+              onPageSize={setPageSize}
+              page={page}
+              totalPages={totalPages}
+              onPage={(n) => {
+                setPage(n);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              totalItems={filtered.length}
+            />
+          </>
+        )}
 
-              <Paginator
-                viewMode={viewMode}
-                onViewMode={(m) => {
-                  setViewMode(m);
-                  try {
-                    localStorage.setItem(VIEW_KEY, m);
-                  } catch {
-                    /* ignore */
-                  }
-                }}
-                pageSize={pageSize}
-                onPageSize={(n) => {
-                  setPageSize(n);
-                  setLoaded(n);
-                  setPage(1);
-                  try {
-                    localStorage.setItem(PAGESIZE_KEY, String(n));
-                  } catch {
-                    /* ignore */
-                  }
-                }}
-                page={clampedPage}
-                totalPages={totalPages}
-                onPage={(n) => {
-                  setPage(n);
-                  document.getElementById("board")?.scrollIntoView({ behavior: "smooth", block: "start" });
-                }}
-                totalItems={visible.length}
-              />
-            </>
-          )}
+        {/* sources */}
+        <section className="mt-16">
+          <SourcesLedger
+            outcomes={outcomes}
+            custom={custom}
+            onPick={(name) => {
+              const asBank = offers.some((o) => o.bank === name);
+              setScope(
+                asBank ? { type: "bank", bank: name } : { type: "vendor", vendor: name },
+              );
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+          />
         </section>
       </main>
 
-      <Footer />
+      <Footer provenance={provenance} lastSync={feed?.fetchedAt ?? null} />
 
-      {toast && (
-        <div className="toast-up fixed bottom-6 left-1/2 z-[80] flex -translate-x-1/2 items-center gap-2 rounded-full border border-line bg-card px-4 py-2.5 font-mono text-[11.5px] tracking-[0.06em] text-ink shadow-[0_18px_40px_-12px_rgba(0,0,0,0.45)]">
-          <CheckIcon className="h-3.5 w-3.5 text-brick" />
-          {toast}
-        </div>
-      )}
-
-      {selected && (
-        <OfferModal
-          offer={selected}
-          scrapedAt={lastSync}
-          generator={payload?.generator ?? "onlydeals"}
-          cardFollowed={follows.includes(cardKey(selected.bank, selected.card))}
-          vendorFollowed={follows.includes(vendorKey(selected.merchant))}
-          onToggleCard={(o) => toggleCard(o.bank, o.card)}
-          onToggleVendor={(o) => toggleVendor(o.merchant)}
-          onClose={() => setSelected(null)}
-          onToast={showToast}
-        />
-      )}
-
+      {/* overlays */}
       <BrowseDrawer
         open={drawerOpen}
         offers={offers}
-        custom={customSources}
+        custom={custom}
         active={scope}
         follows={follows}
-        onApply={applyScope}
+        onApply={(s) => {
+          setScope(s);
+          setDrawerOpen(false);
+        }}
         onClose={() => setDrawerOpen(false)}
-        onLocked={(name) =>
-          showToast(`${name} is still queued — Al Rajhi and Jarir are the live engines for now`)
-        }
-        onToggleCard={toggleCard}
-        onToggleVendor={toggleVendor}
+        onLocked={() => setAuth({ open: true, intent: "follow" })}
+        onToggleCard={(bank, card) => toggle(cardKey(bank, card), `${card} (${bank})`)}
+        onToggleVendor={(merchant) => toggle(vendorKey(merchant), merchant)}
       />
 
-      <AuthModal open={authOpen} intent={authIntent} onClose={() => setAuthOpen(false)} onAuthed={handleAuthed} />
+      {active && (
+        <OfferModal
+          offer={active}
+          scrapedAt={feed?.fetchedAt ?? null}
+          generator={generator}
+          cardFollowed={follows.includes(cardKey(active.bank, active.card))}
+          vendorFollowed={follows.includes(vendorKey(active.merchant))}
+          onToggleCard={onToggleCard}
+          onToggleVendor={onToggleVendor}
+          onClose={() => setActive(null)}
+          onToast={say}
+        />
+      )}
+
+      <AuthModal
+        open={auth.open}
+        intent={auth.intent}
+        onClose={() => setAuth((a) => ({ ...a, open: false }))}
+        onAuthed={(u) => {
+          setUser(u);
+          setFollows(getFollows(u.id));
+          setAuth((a) => ({ ...a, open: false }));
+          say(`Signed in as ${u.displayName || u.username}`);
+        }}
+      />
+
+      {toast && (
+        <div className="modal-pop fixed bottom-5 left-1/2 z-[90] -translate-x-1/2 rounded-md border border-line bg-term px-4 py-2.5 font-mono text-[11.5px] tracking-wide text-ink shadow-xl">
+          {toast}
+        </div>
+      )}
     </div>
-  );
-}
-
-function TagEmpty() {
-  return (
-    <svg viewBox="0 0 48 48" className="h-12 w-12 text-ink-faint" fill="none">
-      <path
-        d="M7 24 22.8 8.2a3 3 0 0 1 2.1-.9H38a3.6 3.6 0 0 1 3.6 3.6v26.2A3.6 3.6 0 0 1 38 40.7H24.9a3 3 0 0 1-2.1-.9L7 24Z"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        opacity="0.55"
-      />
-      <circle cx="14.2" cy="24" r="2.4" stroke="currentColor" strokeWidth="2" opacity="0.6" />
-      <path d="M35 16.5 23.5 32" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" opacity="0.7" />
-      <circle cx="24.3" cy="17.8" r="3.2" stroke="currentColor" strokeWidth="2.2" opacity="0.7" />
-      <circle cx="34.2" cy="30.4" r="3.2" stroke="currentColor" strokeWidth="2.2" opacity="0.7" />
-    </svg>
   );
 }

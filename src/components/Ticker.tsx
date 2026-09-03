@@ -5,7 +5,11 @@ function itemsFrom(offers: Offer[]): string[] {
   if (offers.length === 0)
     return ["ONLYDEALS · SYNCING FEED · ENGINES AL RAJHI + JARIR ON N8N · STAND BY"];
   return offers.map((o) => {
-    const exp = o.expiresAt ? `${daysLeft(o.expiresAt)}D LEFT` : "OPEN-ENDED";
+    let exp = "OPEN-ENDED";
+    if (o.expiresAt) {
+      const d = daysLeft(o.expiresAt);
+      exp = d === 0 ? "ENDS TODAY" : d === 1 ? "ENDS TOMORROW" : `${d}D LEFT`;
+    }
     return `${o.merchant.toUpperCase()} ${o.discountLabel} · ${exp}`;
   });
 }

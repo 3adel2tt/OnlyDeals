@@ -47,7 +47,7 @@ export function alrajhiSnapshot(): Offer[] {
       cards: ["Visa Infinite", "World Elite Mastercard"],
       code: "CHEFZ20",
       link: LINK,
-      expiresAt: daysFromNow(5),
+      expiresAt: daysFromNow(0), // expires tonight — must read "Ends today"
       bank: BANK,
       card: "Visa Infinite",
       terms: [
@@ -126,7 +126,7 @@ export function alrajhiSnapshot(): Offer[] {
       cards: ["Visa Infinite", "Signature Visa"],
       code: "NAMSHI25",
       link: LINK,
-      expiresAt: daysFromNow(3),
+      expiresAt: daysFromNow(1), // last day tomorrow — must read "Ends tomorrow"
       bank: BANK,
       card: "Signature Visa",
       terms: ["Maximum discount SAR 250 per customer.", "Sale items excluded."],

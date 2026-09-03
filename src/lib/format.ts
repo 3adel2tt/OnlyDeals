@@ -9,7 +9,13 @@ export function minutesAgo(n: number): number {
 }
 
 export function daysLeft(iso: string): number {
-  return Math.ceil((new Date(iso).getTime() - Date.now()) / DAY);
+  // Calendar-based: compare whole days at UTC midnight, so an offer that
+  // expires tonight at 20:59:59Z (end of day, Saudi) still counts as "today".
+  const a = new Date(iso);
+  a.setUTCHours(0, 0, 0, 0);
+  const b = new Date();
+  b.setUTCHours(0, 0, 0, 0);
+  return Math.round((a.getTime() - b.getTime()) / DAY);
 }
 
 export function formatDate(iso: string): string {
@@ -47,7 +53,8 @@ export interface ExpiryMeta {
 export function expiryMeta(iso: string | null): ExpiryMeta {
   if (!iso) return { tone: "open", label: "No expiry listed" };
   const d = daysLeft(iso);
-  if (d <= 0) return { tone: "hot", label: "Expired" };
+  if (d < 0) return { tone: "hot", label: "Expired" };
+  if (d === 0) return { tone: "hot", label: "Ends today" };
   if (d === 1) return { tone: "hot", label: "Ends tomorrow" };
   if (d <= 3) return { tone: "hot", label: `${d} days left` };
   if (d <= 7) return { tone: "warm", label: `${d} days left` };
